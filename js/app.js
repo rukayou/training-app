@@ -980,18 +980,27 @@ function routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded) {
         : `<button type="button" class="action-btn training-start-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">編集</button>`;
 }
 
+// 削除ボタンはデフォルト非表示で、行を左にスワイプした時だけ
+// .swipe-row-actions が露出する(initSwipeToRevealが担当)。「+」は逆に
+// 常時表示で、削除ボタンが元々あった行の右端の位置に置く。どの行の+を
+// 押しても常に末尾に新セットを追加する(既存のset-add実装のまま)。
 // Only rendered when expanded - mirrors .training-exercise-body, which stays
 // empty (no DOM at all) while collapsed rather than just visually hidden.
 function routineSetRowHtml(group, dayIndex, exIndex, groupIndex, removable) {
     return `
-        <div class="training-routine-editor-set-row" data-group="${groupIndex}">
-            ${setCountSelectHtml(group.count, `class="training-routine-editor-count-select" data-group="${groupIndex}"`)}
-            <span class="training-routine-editor-set-label">セット:</span>
-            ${weightSelectHtml(group.weight, `class="training-routine-editor-weight-select" data-group="${groupIndex}"`)}
-            <span class="training-routine-editor-unit">kg ×</span>
-            ${repsSelectHtml(group.reps, `class="training-routine-editor-reps-select" data-group="${groupIndex}"`)}
-            <span class="training-routine-editor-unit">回</span>
-            <button type="button" class="action-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-group="${groupIndex}" ${removable ? '' : 'disabled'}>削除</button>
+        <div class="training-routine-editor-set-row swipe-row" data-group="${groupIndex}">
+            <div class="swipe-row-actions">
+                <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-group="${groupIndex}" ${removable ? '' : 'disabled'}>削除</button>
+            </div>
+            <div class="swipe-row-content training-routine-editor-set-row-content">
+                ${setCountSelectHtml(group.count, `class="training-routine-editor-count-select" data-group="${groupIndex}"`)}
+                <span class="training-routine-editor-set-label">セット:</span>
+                ${weightSelectHtml(group.weight, `class="training-routine-editor-weight-select" data-group="${groupIndex}"`)}
+                <span class="training-routine-editor-unit">kg ×</span>
+                ${repsSelectHtml(group.reps, `class="training-routine-editor-reps-select" data-group="${groupIndex}"`)}
+                <span class="training-routine-editor-unit">回</span>
+                <button type="button" class="action-btn training-routine-editor-add-set" data-action="set-add" data-day="${dayIndex}" data-ex="${exIndex}" title="セットを追加" aria-label="セットを追加">+</button>
+            </div>
         </div>
     `;
 }
@@ -1009,7 +1018,6 @@ function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
         <div class="training-routine-editor-exercise-body">
             <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
             <div class="training-routine-editor-set-list">${rows}</div>
-            <button type="button" class="action-btn training-routine-editor-add-set" data-action="set-add" data-day="${dayIndex}" data-ex="${exIndex}">+ セットを追加</button>
         </div>
     `;
 }
@@ -1018,11 +1026,15 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
     const expanded = !!ex.expanded;
     return `
         <div class="training-routine-editor-exercise-row" data-day="${dayIndex}" data-ex="${exIndex}" data-expanded="${expanded}">
-            <div class="training-routine-editor-exercise-header">
-                <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim())}</span>
-                <div class="training-routine-editor-exercise-actions">
-                    ${routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded)}
-                    <button type="button" class="action-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
+            <div class="training-routine-editor-exercise-header swipe-row">
+                <div class="swipe-row-actions">
+                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
+                </div>
+                <div class="swipe-row-content training-routine-editor-exercise-header-content">
+                    <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim())}</span>
+                    <div class="training-routine-editor-exercise-actions">
+                        ${routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded)}
+                    </div>
                 </div>
             </div>
             ${expanded ? routineExerciseBodyHtml(ex, dayIndex, exIndex) : ''}
@@ -1140,6 +1152,108 @@ function readEditorStateFromDom(editorEl, fallbackDays) {
             };
         }),
     }));
+}
+
+// 削除ボタンをデフォルトでは隠し、行(.swipe-row)を左にスワイプした時だけ
+// .swipe-row-actions を露出させる汎用ジェスチャーコントローラ。container
+// (initRoutineEditorのeditorEl)へPointer Eventをdelegateするだけなので、
+// render()がinnerHTMLを丸ごと差し替えても再アタッチ不要 - 差し替え後は
+// 単に「今は何も開いていない」状態から始まるだけで実害はない。
+const SWIPE_DRAG_THRESHOLD_PX = 10;
+
+function initSwipeToReveal(container) {
+    let openRowEl = null;
+    let drag = null;
+    let justDragged = false;
+
+    function closeRow(rowEl) {
+        if (!rowEl) return;
+        const content = rowEl.querySelector(':scope > .swipe-row-content');
+        if (content) content.style.transform = 'translateX(0)';
+        if (openRowEl === rowEl) openRowEl = null;
+    }
+
+    container.addEventListener('pointerdown', (e) => {
+        if (openRowEl && !openRowEl.contains(e.target)) {
+            closeRow(openRowEl);
+        }
+        const rowEl = e.target.closest('.swipe-row');
+        if (!rowEl) return;
+        const contentEl = rowEl.querySelector(':scope > .swipe-row-content');
+        const actionsEl = rowEl.querySelector(':scope > .swipe-row-actions');
+        if (!contentEl || !actionsEl) return;
+        drag = {
+            rowEl,
+            contentEl,
+            actionsWidth: actionsEl.offsetWidth,
+            startX: e.clientX,
+            startY: e.clientY,
+            baseOffset: rowEl === openRowEl ? -actionsEl.offsetWidth : 0,
+            dragging: false,
+            pointerId: e.pointerId,
+        };
+    });
+
+    container.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        if (!drag.dragging) {
+            if (Math.abs(dx) < SWIPE_DRAG_THRESHOLD_PX || Math.abs(dx) <= Math.abs(dy)) return;
+            drag.dragging = true;
+            drag.contentEl.style.transition = 'none';
+            drag.contentEl.setPointerCapture?.(drag.pointerId);
+        }
+        e.preventDefault();
+        const next = Math.min(0, Math.max(-drag.actionsWidth, drag.baseOffset + dx));
+        drag.contentEl.style.transform = `translateX(${next}px)`;
+    });
+
+    function endDrag(e) {
+        if (!drag || (e && e.pointerId !== drag.pointerId)) return;
+        const current = drag;
+        drag = null;
+        if (!current.dragging) return;
+        current.contentEl.style.transition = '';
+        const dx = e ? e.clientX - current.startX : 0;
+        const finalOffset = Math.min(0, Math.max(-current.actionsWidth, current.baseOffset + dx));
+        const shouldOpen = finalOffset <= -current.actionsWidth / 2;
+        if (openRowEl && openRowEl !== current.rowEl) closeRow(openRowEl);
+        if (shouldOpen) {
+            current.contentEl.style.transform = `translateX(-${current.actionsWidth}px)`;
+            openRowEl = current.rowEl;
+        } else {
+            current.contentEl.style.transform = 'translateX(0)';
+            if (openRowEl === current.rowEl) openRowEl = null;
+        }
+        justDragged = true;
+    }
+
+    container.addEventListener('pointerup', endDrag);
+    container.addEventListener('pointercancel', endDrag);
+
+    // キャプチャフェーズで登録 - 同じcontainerに付いている既存の(バブル
+    // フェーズの)data-actionディスパッチより必ず先に評価される。ドラッグの
+    // 副産物として発火する1回だけのclickを握りつぶし、開いた行の本体
+    // (削除ボタン自体は除く)への単純タップはその行を閉じるだけの動作にする。
+    container.addEventListener('click', (e) => {
+        if (justDragged) {
+            justDragged = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        if (openRowEl) {
+            const content = e.target.closest('.swipe-row-content');
+            const rowEl = content ? content.closest('.swipe-row') : null;
+            const inActions = e.target.closest('.swipe-row-actions');
+            if (rowEl === openRowEl && !inActions) {
+                e.preventDefault();
+                e.stopPropagation();
+                closeRow(openRowEl);
+            }
+        }
+    }, true);
 }
 
 function initRoutineEditor(editorEl, { initialDays, trainingState }) {
@@ -1270,6 +1384,8 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         }
         render();
     });
+
+    initSwipeToReveal(editorEl);
 
     render();
 }

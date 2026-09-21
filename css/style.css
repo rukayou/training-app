@@ -29,6 +29,7 @@
     --radius-md: 16px;
     --radius-sm: 10px;
     --radius-pill: 9999px;
+    --danger: #ff3b3b;
     --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     /* Depth system - a raised panel gets a top inner highlight (light hits
        the upper edge) plus a soft drop shadow (it sits above the page); a
@@ -720,12 +721,60 @@ button.btn-primary:active {
     gap: 6px;
 }
 
-.training-routine-editor-exercise-header {
+.training-routine-editor-exercise-header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+/* 削除ボタンをデフォルト非表示にし、行を左スワイプした時だけ露出させる
+   汎用パターン。.swipe-row(クリッピング枠)の中に、右側に隠れている
+   .swipe-row-actions(削除パネル)と、スワイプでtranslateXする
+   .swipe-row-content(通常表示)を重ねて置く。セット行・種目ヘッダーの
+   両方で共通利用(initSwipeToRevealが挙動を制御)。 */
+.swipe-row {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+}
+
+.swipe-row-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 76px;
+    display: flex;
+    align-items: stretch;
+    z-index: 0;
+}
+
+.swipe-row-delete-btn {
+    flex: 1;
+    border: none;
+    background: var(--danger);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.swipe-row-delete-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.swipe-row-content {
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+    transform: translateX(0);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    touch-action: pan-y;
+    will-change: transform;
 }
 
 .training-routine-editor-exercise-name {
@@ -747,7 +796,7 @@ button.btn-primary:active {
     gap: 6px;
 }
 
-.training-routine-editor-set-row {
+.training-routine-editor-set-row-content {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -781,17 +830,10 @@ button.btn-primary:active {
     width: 60px;
 }
 
-.training-routine-editor-remove-set {
-    margin-left: auto;
-}
-
-.training-routine-editor-remove-set:disabled {
-    opacity: 0.35;
-    cursor: default;
-}
-
 .training-routine-editor-add-set {
-    align-self: flex-start;
+    margin-left: auto;
+    padding: 6px 12px;
+    flex-shrink: 0;
 }
 
 .training-routine-editor-unit {
