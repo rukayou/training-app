@@ -1,0 +1,1310 @@
+// 筋トレ記録 - 単独ローカルアプリ版。
+// AICreate(ふたりの伝言板)の training.js をベースに、Firebase/ふたり概念を
+// 全て取り除き、ブラウザの localStorage だけで完結するように書き換えたもの。
+// ES modules は file:// 起源からだとブロックされるブラウザがあるため、
+// このファイル1本を <script>(type="module"なし)として読み込む前提。
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Pure, dependency-free chart drawing - no DOM references.
+// points: { date: string ("YYYY-MM-DD"), value: number }[], already sorted
+// oldest-first.
+function buildTrendSvgMarkup(points) {
+    if (points.length < 2) {
+        // A single point has no trend to draw.
+        return '<p class="training-chart-empty">まだ十分な記録がありません。もう少し続けるとグラフが出ます。</p>';
+    }
+
+    const width = 320;
+    const height = 200;
+    const padding = { top: 28, right: 14, bottom: 30, left: 14 };
+    const plotW = width - padding.left - padding.right;
+    const plotH = height - padding.top - padding.bottom;
+
+    const values = points.map((p) => p.value);
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values);
+    // A flat trend (every session identical) would divide by zero below;
+    // give it a synthetic range so the line still draws as a flat middle
+    // line instead of crashing or collapsing to a single y value off-screen.
+    const range = maxV - minV || 1;
+
+    const stepX = plotW / (points.length - 1);
+    const xAt = (i) => padding.left + i * stepX;
+    const yAt = (v) => padding.top + plotH - ((v - minV) / range) * plotH;
+
+    const coords = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`);
+
+    // Every point's date only really fits if there aren't too many of them
+    // (this is a phone-width card) - thin out to every other/third label
+    // once it'd get crowded, always keeping the very first and last so the
+    // full span of the trend is still readable end to end.
+    const dateLabelStride = points.length <= 6 ? 1 : points.length <= 9 ? 2 : 3;
+    const shouldLabelDate = (i) => i === 0 || i === points.length - 1 || i % dateLabelStride === 0;
+
+    const formatDate = (isoDate) => {
+        const [, m, d] = isoDate.split('-');
+        return `${Number(m)}/${Number(d)}`;
+    };
+    const formatValue = (v) => (Number.isInteger(v) ? `${v}` : v.toFixed(1));
+
+    const circles = points.map((p, i) => {
+        const [x, y] = coords[i].split(',');
+        // Alternate the value label above/below the line itself so two
+        // consecutive close-together points don't overlap their text.
+        const labelY = i % 2 === 0 ? Number(y) - 10 : Number(y) + 18;
+        return `
+            <circle cx="${x}" cy="${y}" r="3.5" fill="var(--primary)" />
+            <text x="${x}" y="${labelY}" class="training-chart-point-label" text-anchor="middle">${formatValue(p.value)}</text>
+            ${shouldLabelDate(i) ? `<text x="${x}" y="${height - 8}" class="training-chart-date-label" text-anchor="middle">${formatDate(p.date)}</text>` : ''}
+        `;
+    }).join('');
+
+    const latest = points[points.length - 1].value;
+    const previous = points.length > 1 ? points[points.length - 2].value : null;
+    const delta = previous !== null ? latest - previous : null;
+    const deltaText = delta === null || delta === 0
+        ? ''
+        : delta > 0
+            ? ` <span class="training-chart-delta-up">↑${formatValue(delta)}</span>`
+            : ` <span class="training-chart-delta-down">↓${formatValue(Math.abs(delta))}</span>`;
+
+    return `
+        <p class="training-chart-summary">最新: <strong>${formatValue(latest)}kg</strong>${deltaText}</p>
+        <svg class="training-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="成長トレンド、最新${formatValue(latest)}キログラム">
+            <text x="${padding.left}" y="14" class="training-chart-range-label">${formatValue(maxV)}kg</text>
+            <text x="${padding.left}" y="${height - padding.bottom + 14}" class="training-chart-range-label">${formatValue(minV)}kg</text>
+            <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" class="training-chart-gridline" />
+            <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" class="training-chart-gridline" />
+            <polyline points="${coords.join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+            ${circles}
+        </svg>
+    `;
+}
+
+// Duplicated deliberately, not shared - this project's established
+// convention (see the source AICreate app) is that files needing JST date
+// math each carry their own well-tested copy rather than share one. Never
+// the `sv-SE` locale trick: that silently produces locale-dependent output
+// on some devices.
+function jstDateString(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Tokyo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const at = (type) => parts.find((p) => p.type === type)?.value;
+    return `${at('year')}-${at('month')}-${at('day')}`;
+}
+
+// Whole JST calendar days between two "YYYY-MM-DD" strings, not elapsed
+// milliseconds - a 23:00 session read again close to 96 hours later must
+// not slip under the threshold just because a few hours are left. Comparing
+// date-only values forces day-boundary math.
+function jstDaysBetween(fromDateStr, toDateStr) {
+    const [fy, fm, fd] = fromDateStr.split('-').map(Number);
+    const [ty, tm, td] = toDateStr.split('-').map(Number);
+    return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000);
+}
+
+const DEFAULT_REST_SECONDS = 90;
+const REST_ADJUST_SECONDS = 15;
+const ALARM_REPEAT_MS = 1200;
+
+const STATE_DEFAULTS = { total_workout_count: 0, last_workout_date: null, alert_threshold_days: 4, rest_seconds: DEFAULT_REST_SECONDS };
+
+// --- localStorage data layer (replaces Firestore) ---
+// Single-user, single-device: no personKey/userHash namespacing, just three
+// fixed keys. training_routines is a plain array (index i = day i+1), so
+// its own length IS the day count - no separate split_count field to keep
+// in sync, and no "leftover doc" cleanup on save (the array replace IS the
+// cleanup).
+const LS_STATE_KEY = 'training_state';
+const LS_ROUTINES_KEY = 'training_routines';
+const LS_LOGS_KEY = 'training_logs';
+
+function readJSON(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw === null ? fallback : JSON.parse(raw);
+    } catch (e) {
+        return fallback;
+    }
+}
+function writeJSON(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+}
+
+function loadState() {
+    return { ...STATE_DEFAULTS, ...readJSON(LS_STATE_KEY, {}) };
+}
+function saveState(partial) {
+    const merged = { ...loadState(), ...partial };
+    writeJSON(LS_STATE_KEY, merged);
+    return merged;
+}
+function loadRoutines() {
+    return readJSON(LS_ROUTINES_KEY, []);
+}
+function saveRoutines(days) {
+    writeJSON(LS_ROUTINES_KEY, days.map((d) => ({
+        label: d.label,
+        exercises: d.exercises.map(({ name, default_weight, target_reps, target_sets }) =>
+            ({ name, default_weight, target_reps, target_sets })), // 一時フィールドexpandedを除外
+    })));
+}
+function updateRoutineDayExercises(day, exercises) {
+    const routines = loadRoutines();
+    routines[day - 1] = { ...routines[day - 1], exercises };
+    saveRoutines(routines);
+}
+function loadLogs() {
+    return readJSON(LS_LOGS_KEY, []).sort((a, b) => a.date.localeCompare(b.date));
+}
+function appendLog(entry) {
+    const logs = readJSON(LS_LOGS_KEY, []);
+    logs.push(entry);
+    writeJSON(LS_LOGS_KEY, logs);
+}
+
+// Keyed by exercise index. Holds the setInterval id plus enough state to
+// re-render the countdown - never trust DOM survival for this, since both
+// "閉じる" and the post-save loadTraining() re-render wipe/replace the DOM
+// these timers live in without knowing a JS interval is still ticking
+// underneath. Once a rest hits zero, the same map entry switches over to
+// holding the *alarm* repeat interval (see enterAlarmState) - either way,
+// stopAllRestTimers()/stopRestTimer() only ever need to clear whatever
+// intervalId is currently stored, never caring which phase it's in.
+//
+// This map only ever holds *live* JS interval state - it is NOT the source
+// of truth for "is a rest running and when does it end". That's
+// localStorage (see persistRestTimer() etc. below), so a rest survives a
+// save-triggered loadTraining() re-render and, more importantly, closing
+// the app entirely and reopening it later: the deadline is a wall-clock
+// timestamp, not a tick count, so whatever real time passed while the JS
+// wasn't running is accounted for correctly the moment the page runs again.
+const restTimers = new Map();
+
+const REST_TIMER_STORAGE_KEY = 'training_rest_timer';
+const REST_STOP_STORAGE_KEY = 'training_rest_stop';
+
+function loadPersistedRestTimers() {
+    try {
+        return JSON.parse(localStorage.getItem(REST_TIMER_STORAGE_KEY) || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function persistRestTimer(exIndex, endTimestamp) {
+    try {
+        const all = loadPersistedRestTimers();
+        all[exIndex] = endTimestamp;
+        localStorage.setItem(REST_TIMER_STORAGE_KEY, JSON.stringify(all));
+    } catch (e) {
+        // localStorage can throw (private browsing quota, etc.) - a rest
+        // timer that doesn't survive a reload in that case is a minor
+        // degradation, not worth surfacing to the user.
+    }
+}
+
+function clearPersistedRestTimer(exIndex) {
+    try {
+        const all = loadPersistedRestTimers();
+        delete all[exIndex];
+        localStorage.setItem(REST_TIMER_STORAGE_KEY, JSON.stringify(all));
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Exercise indices are only meaningful within one day's routine - "保存する"
+// finishes the current session and rolls over to the next day's (different)
+// exercise list, so any rest deadline still sitting in storage would
+// otherwise get misread as belonging to whatever exercise now has that same
+// index on the new day.
+function clearAllPersistedRestTimers() {
+    try {
+        localStorage.removeItem(REST_TIMER_STORAGE_KEY);
+    } catch (e) {
+        // ignore
+    }
+}
+
+// A second, dedicated tab/window open on the same device ends up with its
+// OWN independent countdown, in its OWN script instance - restTimers in
+// that tab has never heard of this one. If both reach zero (each computes
+// from the same wall-clock deadline, so they will, within moments of each
+// other) both start ringing independently, and pressing "停止" in one only
+// ever touched that tab's own Map entry.
+//
+// This can't be solved by watching training_rest_timer (the deadline key)
+// for changes: every tab's own reachZero() already clears that key the
+// moment IT rings, so by the time a human actually presses 停止, the key
+// may already be absent with nothing left to change - no storage event
+// fires from a value that isn't different. A dedicated key instead, written
+// fresh (with a timestamp, so the value always changes) by every explicit
+// stop, sidesteps both problems - it only ever means "a human just stopped
+// this," never anything a normal countdown does on its own.
+function broadcastRestStop(exIndex) {
+    try {
+        localStorage.setItem(REST_STOP_STORAGE_KEY, JSON.stringify({ exIndex, at: Date.now() }));
+    } catch (e) {
+        // ignore
+    }
+}
+
+// The `storage` event fires in every OTHER same-origin tab/window when one
+// of them writes to localStorage - never in the tab that made the change -
+// so this is what makes broadcastRestStop() actually reach those other tabs.
+window.addEventListener('storage', (event) => {
+    if (event.key !== REST_STOP_STORAGE_KEY || !event.newValue) return;
+    let payload;
+    try {
+        payload = JSON.parse(event.newValue);
+    } catch (e) {
+        return;
+    }
+    const exIndex = payload.exIndex;
+    const timer = restTimers.get(exIndex);
+    if (timer) {
+        clearInterval(timer.intervalId);
+        restTimers.delete(exIndex);
+    }
+    const actionsEl = document
+        .getElementById('trainingCard')
+        ?.querySelector(`.training-exercise-block[data-ex="${exIndex}"] .training-exercise-actions`);
+    const liveTimerEl = actionsEl?.querySelector(
+        `.training-rest-timer[data-ex="${exIndex}"], .training-rest-alarm[data-ex="${exIndex}"]`
+    );
+    if (liveTimerEl) liveTimerEl.outerHTML = restStartButtonHtml(exIndex);
+    syncCardAlarmClass();
+});
+
+// One shared AudioContext, resumed on the "レスト開始" click (a real user
+// gesture) rather than created inside the interval callback that fires ~90s
+// later - browsers only unlock autoplay within a gesture's call stack.
+// That alone wasn't enough in practice: some browsers auto-suspend an idle
+// AudioContext again after enough silent seconds pass, which is exactly
+// what a 90s rest is, so playBeep() below re-resumes it on every play
+// rather than trusting the once-on-click unlock to still hold 90s later.
+let audioCtx = null;
+
+// iOS Safari mutes plain <audio>/Web Audio output ("ambient" audio session)
+// while the hardware silent switch is on, but treats a <video> element's
+// audio as media playback and lets it through regardless - this is documented
+// WebKit behavior, not a permission-requiring hack. Routing the oscillators
+// into #restAlarmAudioSink via a MediaStreamAudioDestinationNode instead of
+// straight to audioCtx.destination gets the beep past silent mode on iOS,
+// and is standard enough (plain MediaStream + <video>.srcObject) to work
+// identically on Android/desktop too.
+let mediaStreamDest = null;
+
+// Called on the app's very first tap/click anywhere, not just the "レスト
+// 開始" button - resumePersistedRestTimers() can enter the alarm state
+// automatically on page load (catching up after the app was closed through
+// a rest), before any gesture has happened, so that first playBeep()/
+// showRestBanner() attempt is likely to be silently blocked by autoplay
+// rules. The alarm keeps ringing every ALARM_REPEAT_MS regardless, so
+// unlocking on the next tap - whatever it's for - lets the very next tick
+// actually make noise.
+function unlockAudio() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        if (!mediaStreamDest) {
+            mediaStreamDest = audioCtx.createMediaStreamDestination();
+            const sink = document.getElementById('restAlarmAudioSink');
+            if (sink) sink.srcObject = mediaStreamDest.stream;
+        }
+        // Re-attempted on every unlock, not just the first time the pipeline
+        // is built - the OS itself can pause a backgrounded <video> (screen
+        // lock, app switch), and this is the only place with a guaranteed
+        // user gesture to resume it from.
+        const sink = document.getElementById('restAlarmAudioSink');
+        if (sink && sink.paused) sink.play().catch(() => {});
+    } catch (e) {
+        console.error('Rest timer audio unlock failed:', e);
+    }
+
+    // Local (non-push) notification permission - see enterAlarmState() for
+    // where it's actually used. Asked once, here, alongside the audio
+    // unlock since both need a real user gesture and this is the one place
+    // that's guaranteed to have one.
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
+}
+
+function playBeep() {
+    if (!audioCtx || !mediaStreamDest) return;
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        [0, 0.25].forEach((startOffset) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(mediaStreamDest);
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime + startOffset);
+            osc.start(audioCtx.currentTime + startOffset);
+            osc.stop(audioCtx.currentTime + startOffset + 0.15);
+        });
+    } catch (e) {
+        console.error('Rest timer beep failed:', e);
+    }
+}
+
+// Unconditional, maximally forceful mute - called from every real stop
+// path. Closing the AudioContext itself is specified to release the entire
+// audio processing graph and its underlying system audio resources in one
+// step, regardless of what's still attached to it. unlockAudio()'s existing
+// "create if missing" logic (called at the top of every startRestTimer(),
+// i.e. on every subsequent real "レスト開始" tap - always a user gesture)
+// rebuilds a fresh context and re-attaches a fresh stream to the sink from
+// nothing, so there's no separate rebuild path to maintain here.
+function teardownAudioPipeline() {
+    if (audioCtx) {
+        try { audioCtx.close(); } catch (e) { /* already closed */ }
+    }
+    audioCtx = null;
+    mediaStreamDest = null;
+    const sink = document.getElementById('restAlarmAudioSink');
+    if (sink) {
+        try {
+            sink.pause();
+            sink.srcObject = null;
+        } catch (e) { /* ignore */ }
+    }
+}
+
+// NOTE on iOS: Safari/WebKit has never implemented the Vibration API on
+// iOS, in any browser - navigator.vibrate simply doesn't exist there, so
+// this call is always a no-op on iPhone. Kept unconditional since it's a
+// real, working alert on Android/desktop and harmless everywhere else.
+function vibrateAlert() {
+    try {
+        navigator.vibrate?.(500);
+    } catch (e) {
+        // ignore
+    }
+}
+
+function alertTick() {
+    playBeep();
+    vibrateAlert();
+}
+
+// Local notification (not real push - see unlockAudio() for where the
+// permission was requested). ServiceWorkerRegistration.showNotification()
+// works without a remote push server: the registration just needs to
+// exist (registered below) and permission needs to be granted. Note: this
+// silently no-ops over file:// (no secure context, service workers can't
+// register there at all) - sound/vibration/the in-page alarm still work
+// fine either way.
+async function showRestBanner() {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (!('serviceWorker' in navigator)) return;
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification('⏰ レスト終了！', {
+            body: '次のセットを始めよう',
+            tag: 'training-rest-alarm',
+        });
+    } catch (e) {
+        console.error('Rest timer notification failed:', e);
+    }
+}
+
+function formatRestTime(totalSeconds) {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function restTimerHtml(exIndex, remainingSeconds) {
+    return `
+        <div class="training-rest-timer" data-ex="${exIndex}">
+            <button type="button" class="action-btn training-rest-adjust" data-action="ex-rest-minus" data-ex="${exIndex}">-15秒</button>
+            <span class="training-rest-remaining">残り ${formatRestTime(remainingSeconds)}</span>
+            <button type="button" class="action-btn training-rest-adjust" data-action="ex-rest-plus" data-ex="${exIndex}">+15秒</button>
+            <button type="button" class="action-btn training-rest-cancel" data-action="ex-rest-cancel" data-ex="${exIndex}">✕</button>
+        </div>
+    `;
+}
+
+function restAlarmHtml(exIndex) {
+    return `
+        <div class="training-rest-alarm" data-ex="${exIndex}">
+            <span class="training-rest-alarm-label">⏰ レスト終了！</span>
+            <button type="button" class="action-btn training-rest-stop" data-action="ex-rest-stop" data-ex="${exIndex}">停止</button>
+        </div>
+    `;
+}
+
+function restStartButtonHtml(exIndex) {
+    return `<button type="button" class="action-btn training-rest-btn" data-action="ex-rest-start" data-ex="${exIndex}">レスト開始</button>`;
+}
+
+// Shared by the "開始" click handler and resumePersistedRestTimers() (an
+// exercise with a rest already running needs to come back up expanded, not
+// collapsed, when the app reopens). Returns the actions element so the
+// caller can immediately hand it to startRestTimer().
+function expandExerciseBlock(block, exIndex, exercise) {
+    const header = block.querySelector('.training-exercise-header');
+    const actions = header.querySelector('.training-exercise-actions');
+    const badge = header.querySelector('.training-exercise-done-badge');
+    const body = block.querySelector('.training-exercise-body');
+
+    block.dataset.status = 'expanded';
+    body.innerHTML = exerciseSetRowsHtml(exercise, exIndex);
+    // Swapped for a way back rather than hidden outright - "開始" with no
+    // undo was the exact complaint this fixes.
+    actions.innerHTML = `
+        <button type="button" class="action-btn training-collapse-btn" data-action="ex-collapse" data-ex="${exIndex}">閉じる</button>
+        ${restStartButtonHtml(exIndex)}
+    `;
+    badge.classList.add('hidden');
+    return actions;
+}
+
+// Called once per loadTraining() render, after the card and its click
+// handlers exist - resumes any rest that was still counting down (or
+// already ringing) the last time this app ran, however long ago that was.
+// This is what makes "close the app mid-rest, reopen it later" behave
+// correctly: the deadline survived in localStorage as a wall-clock
+// timestamp, so startRestTimer() below just recomputes from it.
+function resumePersistedRestTimers(form, routineExercises) {
+    const persisted = loadPersistedRestTimers();
+    routineExercises.forEach((exercise, exIndex) => {
+        const endTimestamp = persisted[exIndex];
+        if (endTimestamp === undefined) return;
+        const block = form.querySelector(`.training-exercise-block[data-ex="${exIndex}"]`);
+        if (!block) return;
+        const actions = expandExerciseBlock(block, exIndex, exercise);
+        startRestTimer(exIndex, actions, endTimestamp);
+    });
+}
+
+// A single "レスト終了" badge is easy to miss, especially on iOS where
+// vibration never works (see vibrateAlert()) and the notification banner
+// only fires reliably while the page's JS is still alive - not guaranteed
+// once the app is fully backgrounded/screen-locked. Flashing the whole card
+// is the one alert channel with no such caveats, as long as the screen is
+// on and the page is in view.
+function syncCardAlarmClass() {
+    const anyAlarming = [...restTimers.values()].some((t) => t.phase === 'alarm');
+    const cardEl = document.getElementById('trainingCard');
+    if (cardEl) cardEl.classList.toggle('rest-alarming', anyAlarming);
+}
+
+// Interval-only cleanup - deliberately does not touch localStorage. This
+// runs on every loadTraining() re-render (a save just happened, or the app
+// was reopened) as well as on genuine cancellation, and only the latter
+// should forget the user's rest. Call sites that mean "the user is
+// discarding this rest" (✕, 停止, 閉じる) clear the persisted entry
+// themselves right alongside calling this.
+function stopRestTimer(exIndex) {
+    const timer = restTimers.get(exIndex);
+    if (!timer) return;
+    clearInterval(timer.intervalId);
+    restTimers.delete(exIndex);
+    syncCardAlarmClass();
+}
+
+function stopAllRestTimers() {
+    teardownAudioPipeline();
+    restTimers.forEach((timer) => clearInterval(timer.intervalId));
+    restTimers.clear();
+    syncCardAlarmClass();
+}
+
+// The one place "the user wants this exercise's rest to stop" is actually
+// carried out - used by ✕, 停止, and 閉じる alike. Deliberately does NOT
+// go through restTimers.get(exIndex)?.cancel(): that silently no-ops if the
+// Map entry is ever missing or stale. This instead always clears whatever
+// interval IS registered (safe/no-op if there isn't one), always
+// broadcasts the stop, and always resets the DOM from whatever markup is
+// actually showing (countdown or alarm) back to the plain start button.
+function stopRestForExercise(exIndex, actionsEl) {
+    teardownAudioPipeline();
+    stopRestTimer(exIndex);
+    clearPersistedRestTimer(exIndex);
+    broadcastRestStop(exIndex);
+    const liveEl = actionsEl.querySelector(
+        `.training-rest-timer[data-ex="${exIndex}"], .training-rest-alarm[data-ex="${exIndex}"]`
+    );
+    if (liveEl) liveEl.outerHTML = restStartButtonHtml(exIndex);
+}
+
+// Countdown hit zero (naturally, or via +/-15秒 adjustment landing on 0).
+// Rather than a single fire-and-forget beep, this keeps ringing - sound +
+// vibration every ALARM_REPEAT_MS - until 停止 is pressed, since a single
+// beep is too easy to miss mid-workout.
+function enterAlarmState(exIndex, actionsEl) {
+    stopRestTimer(exIndex);
+
+    const timerEl = actionsEl.querySelector(`.training-rest-timer[data-ex="${exIndex}"]`);
+    if (timerEl) timerEl.outerHTML = restAlarmHtml(exIndex);
+
+    alertTick();
+    showRestBanner();
+    let intervalId;
+    const tick = () => {
+        if (restTimers.get(exIndex)?.intervalId !== intervalId) return;
+        alertTick();
+    };
+    intervalId = setInterval(tick, ALARM_REPEAT_MS);
+    restTimers.set(exIndex, {
+        intervalId,
+        phase: 'alarm',
+        adjust: () => {}, // no-op once ringing - +/-15秒 no longer applies
+        cancel: () => stopRestForExercise(exIndex, actionsEl),
+    });
+    syncCardAlarmClass();
+}
+
+// endTimestamp is a wall-clock deadline (Date.now() + seconds), not a tick
+// count, specifically so this can be resumed correctly - both from a
+// save-triggered loadTraining() re-render and, via
+// resumePersistedRestTimers(), from reopening the app after closing it
+// mid-rest. The caller always supplies this explicitly - a fresh "レスト
+// 開始" tap computes it from the configured rest_seconds, a resume replays
+// the persisted deadline.
+function startRestTimer(exIndex, actionsEl, endTimestamp) {
+    unlockAudio();
+    stopRestTimer(exIndex);
+
+    let end = endTimestamp;
+    persistRestTimer(exIndex, end);
+    const computeRemaining = () => Math.max(0, Math.ceil((end - Date.now()) / 1000));
+
+    const startBtn = actionsEl.querySelector(`[data-action="ex-rest-start"][data-ex="${exIndex}"]`);
+    if (startBtn) startBtn.outerHTML = restTimerHtml(exIndex, computeRemaining());
+
+    const render = () => {
+        const label = actionsEl.querySelector(`.training-rest-timer[data-ex="${exIndex}"] .training-rest-remaining`);
+        if (label) label.textContent = `残り ${formatRestTime(computeRemaining())}`;
+    };
+
+    // Reaching zero hands off to the alarm loop rather than reverting
+    // straight back to "レスト開始" - that's now only what the ✕ (manual
+    // early-cancel) path does.
+    const reachZero = () => {
+        stopRestTimer(exIndex);
+        clearPersistedRestTimer(exIndex);
+        enterAlarmState(exIndex, actionsEl);
+    };
+
+    const cancelCountdown = () => stopRestForExercise(exIndex, actionsEl);
+
+    // Resuming (app reopened) after the deadline already passed while
+    // nothing was running to notice - catch up immediately instead of
+    // rendering a "0:00" that would otherwise sit there forever.
+    if (computeRemaining() <= 0) {
+        reachZero();
+        return;
+    }
+
+    let intervalId;
+    const tick = () => {
+        if (restTimers.get(exIndex)?.intervalId !== intervalId) return;
+        if (computeRemaining() <= 0) {
+            reachZero();
+            return;
+        }
+        render();
+    };
+    intervalId = setInterval(tick, 1000);
+
+    restTimers.set(exIndex, {
+        intervalId,
+        phase: 'countdown',
+        adjust: (deltaSeconds) => {
+            end = Math.max(Date.now(), end + deltaSeconds * 1000);
+            persistRestTimer(exIndex, end);
+            if (computeRemaining() <= 0) {
+                reachZero();
+            } else {
+                render();
+            }
+        },
+        cancel: cancelCountdown,
+    });
+    syncCardAlarmClass();
+}
+
+// Which routine to show is derived purely from how many workouts have been
+// logged so far, cycling 1 -> 2 -> ... -> dayCount -> 1. No separate
+// "current day" pointer is persisted - reordering routines in the editor
+// takes effect immediately on the next load, since this is recomputed
+// fresh every time rather than carried forward.
+function dayForSessionCount(totalWorkoutCount, dayCount) {
+    return (totalWorkoutCount % dayCount) + 1;
+}
+
+function heaviestSet(sets) {
+    // Ties broken by higher reps, not just "first seen" - the harder set is
+    // the one worth crediting for the 1RM estimate.
+    return sets.reduce((best, s) => {
+        if (!best) return s;
+        if (s.weight > best.weight) return s;
+        if (s.weight === best.weight && s.reps > best.reps) return s;
+        return best;
+    }, null);
+}
+
+// Epley formula. "扱った重量" and "最大レップ数" describe the same set, not two
+// independently-chosen maxima across different sets - 最大 just marks this as
+// the real working set rather than a warm-up.
+function estimated1RM(sets) {
+    const top = heaviestSet(sets);
+    if (!top) return 0;
+    return top.weight * (1 + top.reps / 30);
+}
+
+function sessionVolume(exercises) {
+    return exercises.reduce(
+        (sum, ex) => sum + ex.sets.reduce((s, set) => s + set.weight * set.reps, 0),
+        0
+    );
+}
+
+function renderError(container) {
+    container.innerHTML = `
+        <div class="training-toggle" role="status">
+            <span class="training-title">筋トレ記録</span>
+            <span class="training-count">読み込めませんでした</span>
+        </div>
+    `;
+    container.classList.remove('hidden');
+}
+
+function exerciseSetRowsHtml(exercise, exIndex) {
+    return Array.from({ length: exercise.target_sets }, (_, setIndex) => `
+        <div class="training-set-row">
+            <span class="training-set-label">${setIndex + 1}セット目</span>
+            <input type="number" step="0.5" min="0" class="training-weight-input"
+                   data-ex="${exIndex}" data-set="${setIndex}"
+                   value="${exercise.default_weight}">
+            <span class="training-set-unit">kg ×</span>
+            <input type="number" step="1" min="0" class="training-reps-input"
+                   data-ex="${exIndex}" data-set="${setIndex}"
+                   value="${exercise.target_reps}">
+            <span class="training-set-unit">回</span>
+        </div>
+    `).join('');
+}
+
+// Shared between the initial render and "閉じる" (collapse-back-to-pending) -
+// both need to produce the same starting pair of buttons.
+function exerciseActionsHtml(i) {
+    return `
+        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">開始</button>
+        <button type="button" class="action-btn training-complete-btn" data-action="ex-complete" data-ex="${i}">完了</button>
+    `;
+}
+
+// Collapsed by default so opening the panel doesn't dump every exercise's
+// full set of inputs on screen at once. "完了" needs no DOM to insert - it's
+// a pure display-state flip, since readFormExercises() already falls back to
+// the routine's planned values for any exercise whose body was never opened.
+function exerciseBlockHtml(ex, i) {
+    return `
+        <div class="training-exercise-block" data-ex="${i}" data-status="pending">
+            <div class="training-exercise-header">
+                <span class="training-exercise-name">${escapeHtml(ex.name)}</span>
+                <div class="training-exercise-actions">${exerciseActionsHtml(i)}</div>
+                <span class="training-exercise-done-badge hidden">✓ 予定通り <a href="#" class="training-undo-link" data-action="ex-undo" data-ex="${i}">取り消す</a></span>
+            </div>
+            <div class="training-exercise-body"></div>
+        </div>
+    `;
+}
+
+function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise }) {
+    const countHtml = isOverdue
+        ? `⚠️ ${overdueDays}日以上お休み中`
+        : '開始';
+
+    const exerciseBlocks = exercises.map((ex, i) => exerciseBlockHtml(ex, i)).join('');
+
+    const selectOptions = exerciseNames
+        .map((name) => `<option value="${escapeHtml(name)}" ${name === chartExercise ? 'selected' : ''}>${escapeHtml(name)}</option>`)
+        .join('');
+
+    return `
+        <div class="training-header">
+            <span class="training-title">${escapeHtml(label)} ・ 通算${pendingSessionNumber}日目</span>
+            <div class="training-header-actions">
+                <button type="button" class="training-start-toggle ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
+                    ${countHtml} <span class="training-chevron">▾</span>
+                </button>
+            </div>
+        </div>
+        <div class="training-list hidden">
+            <form class="training-form">
+                ${exerciseBlocks}
+                <button type="submit" class="btn-primary training-save-btn">保存する</button>
+            </form>
+            <div class="training-chart-section">
+                <select class="training-exercise-select">${selectOptions}</select>
+                <div class="training-chart-wrap"></div>
+            </div>
+        </div>
+    `;
+}
+
+// --- Routine editor (add/remove/reorder days & exercises, edit
+// name/weight/reps/sets/labels). Plain up/down buttons rather than
+// drag-and-drop: a day realistically holds a handful of exercises, so
+// pointer-based DnD isn't worth the risk for what two buttons already do.
+
+// Mirrors exerciseActionsHtml's 開始/完了 pair - collapsed shows "編集" in
+// the same neutral training-start-btn color, expanded shows "閉じる" in the
+// same training-collapse-btn color, so the routine editor's accordion reads
+// as visually identical to the real workout card's.
+function routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded) {
+    return expanded
+        ? `<button type="button" class="action-btn training-collapse-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">閉じる</button>`
+        : `<button type="button" class="action-btn training-start-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">編集</button>`;
+}
+
+// Only rendered when expanded - mirrors .training-exercise-body, which stays
+// empty (no DOM at all) while collapsed rather than just visually hidden.
+function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
+    return `
+        <div class="training-routine-editor-exercise-body">
+            <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
+            <div class="training-routine-editor-exercise-fields">
+                <input type="number" step="0.5" min="0" class="training-routine-editor-weight-input" value="${ex.default_weight}">
+                <span class="training-routine-editor-unit">kg ×</span>
+                <input type="number" step="1" min="1" class="training-routine-editor-reps-input" value="${ex.target_reps}">
+                <span class="training-routine-editor-unit">回 ×</span>
+                <input type="number" step="1" min="1" class="training-routine-editor-sets-input" value="${ex.target_sets}">
+                <span class="training-routine-editor-unit">セット</span>
+            </div>
+        </div>
+    `;
+}
+
+function routineExerciseRowHtml(ex, dayIndex, exIndex) {
+    const expanded = !!ex.expanded;
+    return `
+        <div class="training-routine-editor-exercise-row" data-day="${dayIndex}" data-ex="${exIndex}" data-expanded="${expanded}">
+            <div class="training-routine-editor-exercise-header">
+                <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim() || '(名称未設定)')}</span>
+                <div class="training-routine-editor-exercise-actions">
+                    ${routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded)}
+                    <button type="button" class="action-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
+                </div>
+            </div>
+            ${expanded ? routineExerciseBodyHtml(ex, dayIndex, exIndex) : ''}
+        </div>
+    `;
+}
+
+function routineDayBlockHtml(day, dayIndex, days) {
+    const rows = day.exercises.map((ex, i) => routineExerciseRowHtml(ex, dayIndex, i)).join('');
+    return `
+        <div class="training-routine-editor-day" data-day="${dayIndex}">
+            <div class="training-routine-editor-day-header">
+                <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
+                <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
+                <button type="button" class="action-btn training-routine-editor-day-move-up" data-action="day-move-up" data-day="${dayIndex}" ${dayIndex === 0 ? 'disabled' : ''}>↑</button>
+                <button type="button" class="action-btn training-routine-editor-day-move-down" data-action="day-move-down" data-day="${dayIndex}" ${dayIndex === days.length - 1 ? 'disabled' : ''}>↓</button>
+                <button type="button" class="action-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>このルーティーンを削除</button>
+            </div>
+            <div class="training-routine-editor-exercise-list">${rows}</div>
+            <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>
+        </div>
+    `;
+}
+
+// A closed set of presets rather than free-form input, so there's nothing
+// to validate - reuses the same "M:SS" formatting already shown on the live
+// countdown (formatRestTime) instead of inventing a second time format.
+const REST_DURATION_OPTIONS_SECONDS = [30, 45, 60, 90, 120, 150, 180, 240, 300];
+
+function routineRestSelectHtml(restSeconds) {
+    const options = REST_DURATION_OPTIONS_SECONDS
+        // Always include whatever's actually saved even if it's not one of
+        // the presets, so opening the editor never silently shows the
+        // wrong selection.
+        .concat(REST_DURATION_OPTIONS_SECONDS.includes(restSeconds) ? [] : [restSeconds])
+        .sort((a, b) => a - b)
+        .map((s) => `<option value="${s}" ${s === restSeconds ? 'selected' : ''}>${formatRestTime(s)}</option>`)
+        .join('');
+    return `
+        <label class="training-routine-editor-rest-label">デフォルトのレスト時間:
+            <select class="training-routine-editor-rest-select">${options}</select>
+        </label>
+    `;
+}
+
+function routineEditorHtml(days, restSeconds) {
+    const dayBlocks = days.map((day, i) => routineDayBlockHtml(day, i, days)).join('');
+    return `
+        <div class="training-routine-editor-days">${dayBlocks}</div>
+        <div class="training-routine-editor-settings">
+            ${routineRestSelectHtml(restSeconds)}
+        </div>
+        <div class="training-routine-editor-footer">
+            <button type="button" class="action-btn training-routine-editor-add-day" data-action="day-add">+ ルーティーンを追加</button>
+            <button type="button" class="btn-primary training-routine-editor-save-btn" data-action="routine-save">ルーティーンを保存する</button>
+        </div>
+    `;
+}
+
+// Rendered in place of the normal card when there are zero routine days
+// yet. The actual routine-creation UI lives entirely on the ルーティーン
+// 管理 tab (see loadRoutineManagement()) - this card just points there.
+function noRoutineMessageHtml() {
+    return `
+        <div class="training-header">
+            <span class="training-title">筋トレルーティーン</span>
+        </div>
+        <p class="training-no-routine-message">まだルーティーンがありません。上の「ルーティーン管理」タブから作成できます。</p>
+    `;
+}
+
+// Reads the editor's current DOM state back into the plain-object shape
+// used everywhere else in this file - called both to build the payload to
+// save and, before any structural mutation (add/remove/move), to capture
+// whatever's been typed into OTHER rows so it isn't lost when the whole
+// editor gets re-rendered.
+function readEditorStateFromDom(editorEl, fallbackDays) {
+    return Array.from(editorEl.querySelectorAll('.training-routine-editor-day')).map((dayEl, dayIndex) => ({
+        label: dayEl.querySelector('.training-routine-editor-label-input').value,
+        exercises: Array.from(dayEl.querySelectorAll('.training-routine-editor-exercise-row')).map((row, exIndex) => {
+            // A collapsed row has no input fields in the DOM at all - fall
+            // back to whatever this exercise already held rather than
+            // reading from nodes that don't exist.
+            const fallback = fallbackDays?.[dayIndex]?.exercises?.[exIndex];
+            const nameInput = row.querySelector('.training-routine-editor-name-input');
+            const weightInput = row.querySelector('.training-routine-editor-weight-input');
+            const repsInput = row.querySelector('.training-routine-editor-reps-input');
+            const setsInput = row.querySelector('.training-routine-editor-sets-input');
+            return {
+                name: nameInput ? nameInput.value : (fallback?.name ?? ''),
+                default_weight: weightInput ? Number(weightInput.value) : (fallback?.default_weight ?? 0),
+                target_reps: repsInput ? Number(repsInput.value) : (fallback?.target_reps ?? 1),
+                target_sets: setsInput ? Number(setsInput.value) : (fallback?.target_sets ?? 1),
+                expanded: row.dataset.expanded === 'true',
+            };
+        }),
+    }));
+}
+
+function initRoutineEditor(editorEl, { initialDays, trainingState }) {
+    let days = JSON.parse(JSON.stringify(initialDays));
+    let restSeconds = trainingState.rest_seconds;
+
+    function render() {
+        editorEl.innerHTML = routineEditorHtml(days, restSeconds);
+    }
+
+    async function saveRoutine() {
+        const proposed = readEditorStateFromDom(editorEl, days);
+        // routine-save short-circuits before the click handler's usual
+        // "sync from DOM" step below, so this has to read the select's
+        // live value directly rather than trust the closure variable.
+        const restSecondsValue = Number(editorEl.querySelector('.training-routine-editor-rest-select').value);
+
+        if (proposed.length < 1) {
+            alert('少なくとも1つはルーティーンが必要です。');
+            return;
+        }
+        for (let dayIndex = 0; dayIndex < proposed.length; dayIndex++) {
+            const day = proposed[dayIndex];
+            if (day.exercises.length < 1) {
+                alert('各ルーティーンに1つ以上の種目が必要です。');
+                return;
+            }
+            for (let exIndex = 0; exIndex < day.exercises.length; exIndex++) {
+                const ex = day.exercises[exIndex];
+                let message = null;
+                if (!ex.name.trim()) {
+                    message = '種目名を入力してください。';
+                } else if (!Number.isFinite(ex.default_weight) || ex.default_weight < 0) {
+                    message = '重量は0以上の数値で入力してください。';
+                } else if (!Number.isInteger(ex.target_reps) || ex.target_reps < 1) {
+                    message = '回数は1以上の整数で入力してください。';
+                } else if (!Number.isInteger(ex.target_sets) || ex.target_sets < 1) {
+                    message = 'セット数は1以上の整数で入力してください。';
+                }
+                if (message) {
+                    // A collapsed row's invalid value would otherwise be
+                    // invisible - force it open so the alert points at
+                    // something visible to fix.
+                    days = proposed;
+                    days[dayIndex].exercises[exIndex].expanded = true;
+                    render();
+                    alert(message);
+                    return;
+                }
+            }
+        }
+
+        const saveBtn = editorEl.querySelector('[data-action="routine-save"]');
+        saveBtn.disabled = true;
+        try {
+            saveRoutines(proposed);
+            saveState({ rest_seconds: restSecondsValue });
+
+            // Both refresh: the workout card (day count/day1 content/
+            // rest_seconds may have changed) and the editor itself.
+            loadTraining();
+            loadRoutineManagement();
+        } catch (err) {
+            console.error('Routine save error:', err);
+            alert('ルーティーンの保存に失敗しました。');
+            saveBtn.disabled = false;
+        }
+    }
+
+    editorEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+        e.preventDefault();
+        const { action } = btn.dataset;
+        if (action === 'routine-save') {
+            saveRoutine();
+            return;
+        }
+
+        const dayIndex = Number(btn.dataset.day);
+        const exIndex = Number(btn.dataset.ex);
+        // Capture whatever's currently typed into every row before mutating
+        // the structure, so an add/remove/move elsewhere doesn't blow away
+        // an in-progress edit in an unrelated row. Same reasoning for the
+        // rest-duration select, which lives outside the per-day blocks.
+        days = readEditorStateFromDom(editorEl, days);
+        const restSelectEl = editorEl.querySelector('.training-routine-editor-rest-select');
+        if (restSelectEl) restSeconds = Number(restSelectEl.value);
+
+        if (action === 'day-add') {
+            days.push({ label: '', exercises: [{ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true }] });
+        } else if (action === 'day-remove') {
+            if (days.length <= 1) {
+                alert('少なくとも1つはルーティーンが必要です。');
+                return;
+            }
+            days.splice(dayIndex, 1);
+        } else if (action === 'day-move-up' && dayIndex > 0) {
+            [days[dayIndex - 1], days[dayIndex]] = [days[dayIndex], days[dayIndex - 1]];
+        } else if (action === 'day-move-down' && dayIndex < days.length - 1) {
+            [days[dayIndex], days[dayIndex + 1]] = [days[dayIndex + 1], days[dayIndex]];
+        } else if (action === 'ex-add') {
+            days[dayIndex].exercises.push({ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true });
+        } else if (action === 'ex-remove') {
+            days[dayIndex].exercises.splice(exIndex, 1);
+        } else if (action === 'ex-toggle') {
+            days[dayIndex].exercises[exIndex].expanded = !days[dayIndex].exercises[exIndex].expanded;
+        }
+        render();
+    });
+
+    render();
+}
+
+// An exercise left collapsed - whether "完了" was tapped or it was simply
+// never opened - has no input elements in the DOM at all. Both cases mean
+// the same thing: record it exactly as planned, using the routine's own
+// numbers rather than reading anything from the page.
+function readFormExercises(form, routineExercises) {
+    return routineExercises.map((ex, exIndex) => {
+        const body = form.querySelector(`.training-exercise-block[data-ex="${exIndex}"] .training-exercise-body`);
+        const opened = body && body.querySelector('.training-weight-input');
+        const sets = opened
+            ? Array.from({ length: ex.target_sets }, (_, setIndex) => ({
+                weight: Number(body.querySelector(`.training-weight-input[data-set="${setIndex}"]`).value) || 0,
+                reps: Number(body.querySelector(`.training-reps-input[data-set="${setIndex}"]`).value) || 0,
+            }))
+            : Array.from({ length: ex.target_sets }, () => ({ weight: ex.default_weight, reps: ex.target_reps }));
+        return { name: ex.name, defaultWeight: ex.default_weight, sets };
+    });
+}
+
+function drawChart(container, logs, exerciseName) {
+    const points = logs
+        .map((log) => {
+            const match = log.exercises.find((e) => e.name === exerciseName);
+            return match ? { date: log.date, value: match.estimated1RM } : null;
+        })
+        .filter(Boolean)
+        .slice(-12);
+    container.innerHTML = buildTrendSvgMarkup(points);
+}
+
+// Populates the ルーティーン管理 tab, independent of loadTraining() - this
+// runs eagerly on boot so the tab is already rendered the instant someone
+// clicks it, and again after every successful save.
+async function loadRoutineManagement() {
+    const container = document.getElementById('routineManagementEditor');
+    if (!container) return;
+    try {
+        const trainingState = loadState();
+        const routines = loadRoutines();
+        const initialDays = routines.length > 0
+            ? routines.map((r) => ({ label: r.label || '', exercises: r.exercises.map((ex) => ({ ...ex, expanded: false })) }))
+            : [{ label: '', exercises: [{ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true }] }];
+        initRoutineEditor(container, { initialDays, trainingState });
+    } catch (e) {
+        console.error('Routine management load error:', e);
+        container.innerHTML = '<p class="training-no-routine-message">読み込めませんでした。</p>';
+    }
+}
+
+async function loadTraining() {
+    const container = document.getElementById('trainingCard');
+    if (!container) return;
+
+    // Any rest timer from a previous render (e.g. this is the re-render
+    // loadTraining() triggers right after a save) is about to lose its DOM
+    // to the innerHTML rebuild below - stop it explicitly rather than
+    // leaving an orphaned interval ticking against detached nodes.
+    stopAllRestTimers();
+
+    try {
+        const trainingState = loadState();
+        const routines = loadRoutines();
+
+        if (routines.length === 0) {
+            // No routine created yet - point at the ルーティーン管理 tab,
+            // which handles bootstrapping the first routine on its own.
+            container.innerHTML = noRoutineMessageHtml();
+            container.classList.remove('hidden');
+            return;
+        }
+
+        const day = dayForSessionCount(trainingState.total_workout_count, routines.length);
+        const pendingSessionNumber = trainingState.total_workout_count + 1;
+        const routine = routines[day - 1];
+
+        const isOverdue = trainingState.last_workout_date !== null
+            && jstDaysBetween(trainingState.last_workout_date, jstDateString()) >= trainingState.alert_threshold_days;
+        const overdueDays = isOverdue ? jstDaysBetween(trainingState.last_workout_date, jstDateString()) : 0;
+
+        const exerciseNames = [...new Set(routines.flatMap((r) => r.exercises.map((e) => e.name)))];
+        const chartExercise = routine.exercises[0]?.name || exerciseNames[0];
+
+        const logs = loadLogs();
+
+        container.innerHTML = buildCardHtml({
+            label: routine.label || `ルーティーン${day}`, pendingSessionNumber, isOverdue, overdueDays,
+            exercises: routine.exercises, exerciseNames, chartExercise,
+        });
+        container.classList.remove('hidden');
+
+        const toggleBtn = container.querySelector('.training-start-toggle');
+        const list = container.querySelector('.training-list');
+        toggleBtn.addEventListener('click', () => {
+            const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+            toggleBtn.setAttribute('aria-expanded', String(!expanded));
+            list.classList.toggle('hidden', expanded);
+            container.classList.toggle('expanded', !expanded);
+        });
+
+        const chartWrap = container.querySelector('.training-chart-wrap');
+        const select = container.querySelector('.training-exercise-select');
+        if (chartExercise) drawChart(chartWrap, logs, chartExercise);
+        select.addEventListener('change', () => drawChart(chartWrap, logs, select.value));
+
+        const form = container.querySelector('.training-form');
+
+        form.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action], a[data-action]');
+            if (!btn) return;
+            e.preventDefault();
+
+            const { action, ex } = btn.dataset;
+            const exIndex = Number(ex);
+
+            // 停止/キャンセルはボタン自身から辿れるDOMだけで完結させ、他の
+            // ブロック/ヘッダーのルックアップより先に処理する - block等の
+            // どれかがnullで以降の行が例外を投げても、アラームを止める操作
+            // だけは絶対にそこで巻き込まれて止まらないようにするため。
+            if (action === 'ex-rest-stop' || action === 'ex-rest-cancel') {
+                const actionsEl = btn.closest('.training-exercise-actions');
+                if (actionsEl) stopRestForExercise(exIndex, actionsEl);
+                if (action === 'ex-rest-stop') {
+                    // 停止は押した種目だけでなく、その時点で本当に鳴って
+                    // いる他の種目も一緒に止める。複数種目を開始していると
+                    // 同時期にアラーム状態になり得るため、ユーザー視点では
+                    // 「音」は1つであり、どのボタンを押しても鳴り止むべき。
+                    [...restTimers.entries()]
+                        .filter(([otherEx, timer]) => otherEx !== exIndex && timer.phase === 'alarm')
+                        .forEach(([alarmingEx]) => {
+                            const targetActions = form.querySelector(
+                                `.training-exercise-block[data-ex="${alarmingEx}"] .training-exercise-actions`
+                            );
+                            if (targetActions) stopRestForExercise(alarmingEx, targetActions);
+                        });
+                }
+                return;
+            }
+
+            const block = form.querySelector(`.training-exercise-block[data-ex="${ex}"]`);
+            const header = block.querySelector('.training-exercise-header');
+            const actions = header.querySelector('.training-exercise-actions');
+            const badge = header.querySelector('.training-exercise-done-badge');
+            const body = block.querySelector('.training-exercise-body');
+
+            if (action === 'ex-start') {
+                expandExerciseBlock(block, exIndex, routine.exercises[exIndex]);
+            } else if (action === 'ex-collapse') {
+                stopRestTimer(exIndex);
+                clearPersistedRestTimer(exIndex);
+                broadcastRestStop(exIndex);
+                block.dataset.status = 'pending';
+                body.innerHTML = '';
+                actions.innerHTML = exerciseActionsHtml(exIndex);
+            } else if (action === 'ex-complete') {
+                block.dataset.status = 'done';
+                actions.classList.add('hidden');
+                badge.classList.remove('hidden');
+            } else if (action === 'ex-undo') {
+                block.dataset.status = 'pending';
+                actions.classList.remove('hidden');
+                badge.classList.add('hidden');
+            } else if (action === 'ex-rest-start') {
+                startRestTimer(exIndex, actions, Date.now() + trainingState.rest_seconds * 1000);
+            } else if (action === 'ex-rest-minus') {
+                restTimers.get(exIndex)?.adjust(-REST_ADJUST_SECONDS);
+            } else if (action === 'ex-rest-plus') {
+                restTimers.get(exIndex)?.adjust(REST_ADJUST_SECONDS);
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const exercises = readFormExercises(form, routine.exercises);
+
+            const hasAnyReps = exercises.some((ex) => ex.sets.some((s) => s.reps > 0));
+            if (!hasAnyReps) {
+                alert('少なくとも1セットは回数を入力してください。');
+                return;
+            }
+
+            const sessionDate = jstDateString();
+            const now = new Date().toLocaleString('ja-JP');
+            const logExercises = exercises.map((ex) => ({
+                name: ex.name,
+                sets: ex.sets,
+                estimated1RM: Math.round(estimated1RM(ex.sets) * 10) / 10,
+            }));
+            const volume = sessionVolume(exercises);
+            const newCount = pendingSessionNumber;
+
+            try {
+                appendLog({
+                    day,
+                    date: sessionDate,
+                    createdAt: now,
+                    total_workout_count: newCount,
+                    exercises: logExercises,
+                    volume,
+                });
+
+                saveState({
+                    total_workout_count: newCount,
+                    last_workout_date: sessionDate,
+                    alert_threshold_days: trainingState.alert_threshold_days,
+                });
+
+                // "以上" (at-or-above) the current default still counts as a
+                // new best worth remembering, per the spec.
+                const updatedExercises = routine.exercises.map((ex, i) => {
+                    const top = heaviestSet(exercises[i].sets);
+                    return top && top.weight >= ex.default_weight
+                        ? { ...ex, default_weight: top.weight }
+                        : ex;
+                });
+                const anyChanged = updatedExercises.some((ex, i) => ex.default_weight !== routine.exercises[i].default_weight);
+                if (anyChanged) {
+                    updateRoutineDayExercises(day, updatedExercises);
+                }
+
+                clearAllPersistedRestTimers();
+                loadTraining();
+            } catch (err) {
+                console.error('Training save error:', err);
+                alert('記録の保存に失敗しました。');
+            }
+        });
+
+        resumePersistedRestTimers(form, routine.exercises);
+    } catch (e) {
+        console.error('Training load error:', e);
+        renderError(container);
+    }
+}
+
+// --- Tabs (今日のトレーニング / ルーティーン管理) ---
+function initTabs() {
+    const tabs = [
+        { btnId: 'tabTodayBtn', viewId: 'todayView' },
+        { btnId: 'tabRoutinesBtn', viewId: 'routinesView' },
+    ];
+    function activate(tabName) {
+        tabs.forEach(({ btnId, viewId }) => {
+            const btn = document.getElementById(btnId);
+            const view = document.getElementById(viewId);
+            const isActive = btn.dataset.tab === tabName;
+            btn.setAttribute('aria-selected', String(isActive));
+            view.classList.toggle('hidden', !isActive);
+        });
+    }
+    document.querySelectorAll('.app-tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => activate(btn.dataset.tab));
+    });
+}
+
+// --- Boot ---
+function registerServiceWorker() {
+    // Needed only so the rest-timer can call
+    // ServiceWorkerRegistration.showNotification() - no push, no caching.
+    // Best-effort: silently no-ops over file:// (no secure context) or in
+    // older browsers without support - sound/vibration/the in-page alarm
+    // still work regardless.
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('sw.js').catch((e) => {
+        console.error('Service worker registration failed:', e);
+    });
+}
+
+function unlockAudioOnFirstTap() {
+    // A rest-timer alarm resumed automatically on page load (the app was
+    // reopened after being closed mid-rest) can't play sound on its first
+    // attempt - there's been no user gesture yet this session, so the
+    // browser blocks it. It keeps ringing regardless, so unlocking here on
+    // literally the first tap anywhere gives the very next ring a real
+    // chance to be heard.
+    document.addEventListener('pointerdown', unlockAudio, { once: true });
+}
+
+function boot() {
+    initTabs();
+    loadTraining();
+    loadRoutineManagement();
+    registerServiceWorker();
+    unlockAudioOnFirstTap();
+    window.__appBooted = true;
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+} else {
+    boot();
+}

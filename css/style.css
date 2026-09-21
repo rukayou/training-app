@@ -1,0 +1,776 @@
+/* Extracted/trimmed from AICreate public/css/style.css for the standalone training-app. */
+
+.training-card {
+    background: linear-gradient(180deg, #1a1a1a, var(--surface));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 4px 20px;
+    box-shadow: var(--shadow-panel);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+:root {
+    --bg: #000000;
+    --surface: #151515;
+    --surface-soft: #202020;
+    --text-main: #f5f5f5;
+    --text-muted: #9a9a9a;
+    --accent: #4f8cff;
+    --accent-light: #7fadff;
+    --accent-deep: #2456d6;
+    --accent-wash: rgba(79, 140, 255, 0.18);
+    --line: rgba(255, 255, 255, 0.16);
+    --line-soft: rgba(255, 255, 255, 0.08);
+    --primary: var(--accent);
+    --primary-hover: var(--accent-deep);
+    --card-bg: var(--surface);
+    --card-border: var(--line);
+    --radius-lg: 24px;
+    --radius-md: 16px;
+    --radius-sm: 10px;
+    --radius-pill: 9999px;
+    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Depth system - a raised panel gets a top inner highlight (light hits
+       the upper edge) plus a soft drop shadow (it sits above the page); a
+       pressed/filled button additionally gets a colored glow under it. */
+    --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 1px 2px rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.85);
+    --shadow-btn: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 6px 14px -6px rgba(0, 0, 0, 0.55);
+    --shadow-btn-pressed: 0 1px 3px rgba(0, 0, 0, 0.45) inset;
+    --shadow-accent: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 10px 22px -8px rgba(79, 140, 255, 0.55);
+    --shadow-accent-hover: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 14px 28px -8px rgba(79, 140, 255, 0.65);
+    --shadow-accent-pressed: 0 1px 4px rgba(0, 0, 0, 0.4) inset;
+}
+
+body {
+    font-family: 'Plus Jakarta Sans', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    background-image:
+        radial-gradient(circle at 12% 6%, rgba(79, 140, 255, 0.12), transparent 40%),
+        radial-gradient(circle at 90% 94%, rgba(255, 255, 255, 0.05), transparent 42%);
+    background-attachment: fixed;
+    color: var(--text-main);
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.container {
+    width: 100%;
+}
+
+button.btn-primary {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent-light), var(--accent) 55%, var(--accent-deep));
+    color: #ffffff;
+    border: 1px solid var(--accent-deep);
+    padding: 14px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.98rem;
+    letter-spacing: 0.01em;
+    box-shadow: var(--shadow-accent);
+    transition: var(--transition);
+}
+
+button.btn-primary:hover {
+    background: linear-gradient(180deg, var(--accent-light), var(--accent-deep) 60%, #1a3fa8);
+    border-color: #1a3fa8;
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-accent-hover);
+}
+
+button.btn-primary:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-accent-pressed);
+}
+
+.app-shell {
+    width: 100%;
+    max-width: 960px;
+    margin: 20px auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.app-header {
+    background: linear-gradient(180deg, #1a1a1a, var(--surface));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 20px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    box-shadow: var(--shadow-panel);
+}
+
+.app-main {
+    background: linear-gradient(180deg, #1a1a1a, var(--surface));
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 28px 24px;
+    flex: 1 1 auto;
+    min-width: 0;
+    box-shadow: var(--shadow-panel);
+}
+
+.app-footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding: 4px 0 8px;
+}
+
+.app-header h1 {
+    white-space: nowrap;
+    margin-bottom: 0;
+}
+
+.app-tabs {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.app-tab-btn {
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    padding: 8px 18px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    box-shadow: var(--shadow-btn);
+    transition: var(--transition);
+}
+
+.app-tab-btn:hover {
+    color: var(--text-main);
+}
+
+.app-tab-btn[aria-selected="true"] {
+    background: var(--accent-wash);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.training-card.rest-alarming {
+    animation: rest-alarm-flash 1s ease-in-out infinite;
+}
+
+.training-toggle {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 12px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+}
+
+.training-title {
+    font-weight: 700;
+    font-size: 1.02rem;
+    color: var(--text-main);
+}
+
+.training-count {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.training-chevron {
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.training-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+}
+
+.training-start-toggle {
+    flex-shrink: 0;
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    padding: 8px 14px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: var(--shadow-btn);
+    transition: var(--transition);
+}
+
+.training-start-toggle:hover {
+    background: var(--text-main);
+    color: #0a0a0a;
+    border-color: var(--text-main);
+    transform: translateY(-1px);
+}
+
+.training-start-toggle:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-btn-pressed);
+}
+
+.training-start-toggle.is-overdue {
+    background: rgba(255, 82, 82, 0.14);
+    color: #ff6b6b;
+    border-color: rgba(255, 82, 82, 0.5);
+}
+
+.training-start-toggle[aria-expanded="true"] .training-chevron {
+    transform: rotate(180deg);
+}
+
+.training-list {
+    padding: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.training-exercise-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.training-exercise-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.training-exercise-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+
+.training-exercise-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.training-start-btn {
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border: 1px solid var(--line);
+}
+
+.training-complete-btn {
+    background: linear-gradient(180deg, var(--accent-light), var(--accent) 55%, var(--accent-deep));
+    color: #ffffff;
+    border: 1px solid var(--accent-deep);
+    box-shadow: var(--shadow-accent);
+}
+
+.training-collapse-btn {
+    background: var(--surface-soft);
+    color: var(--text-muted);
+    border: 1px solid var(--line);
+}
+
+.training-rest-btn {
+    background: var(--accent-wash);
+    color: var(--accent-light);
+    border: 1px solid transparent;
+}
+
+.training-rest-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+}
+
+.training-rest-remaining {
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 52px;
+    text-align: center;
+}
+
+.training-rest-adjust {
+    background: var(--accent-wash);
+    color: var(--accent);
+    border: 1px solid transparent;
+    padding: 6px 10px;
+    font-size: 0.75rem;
+}
+
+.training-rest-cancel {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+}
+
+.training-rest-alarm {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    animation: rest-alarm-pulse 1s ease-in-out infinite;
+}
+
+.training-rest-alarm-label {
+    font-weight: 700;
+    color: #ff6b6b;
+}
+
+.training-rest-stop {
+    background: #ff3b3b;
+    color: #0a0a0a;
+    border: 1px solid #ff3b3b;
+    padding: 6px 12px;
+}
+
+.training-exercise-done-badge {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.training-undo-link {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-decoration: underline;
+}
+
+.training-exercise-body:not(:empty) {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.training-set-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+}
+
+.training-set-label {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    width: 62px;
+}
+
+.training-set-row input[type="number"] {
+    width: 56px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: var(--transition);
+}
+
+.training-set-row input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #262626;
+    box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.training-set-unit {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.training-save-btn {
+    margin-top: 4px;
+}
+
+.training-chart-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
+}
+
+.training-exercise-select {
+    align-self: flex-start;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.82rem;
+}
+
+.training-chart-wrap {
+    width: 100%;
+    height: 200px;
+}
+
+.training-chart-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.training-chart-empty {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.training-chart-summary {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+
+.training-chart-summary strong {
+    font-size: 0.95rem;
+}
+
+.training-chart-delta-up {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.training-chart-delta-down {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.training-chart-gridline {
+    stroke: var(--line-soft);
+    stroke-width: 1;
+}
+
+.training-chart-range-label {
+    fill: var(--text-muted);
+    font-size: 9px;
+    font-family: inherit;
+}
+
+.training-chart-point-label {
+    fill: var(--text-main);
+    font-size: 9px;
+    font-weight: 600;
+    font-family: inherit;
+}
+
+.training-chart-date-label {
+    fill: var(--text-muted);
+    font-size: 8px;
+    font-family: inherit;
+}
+
+.training-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.training-start-toggle {
+    flex-shrink: 0;
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    padding: 8px 14px;
+    font-weight: 700;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: var(--shadow-btn);
+    transition: var(--transition);
+}
+
+.training-start-toggle:hover {
+    background: var(--text-main);
+    color: #0a0a0a;
+    border-color: var(--text-main);
+    transform: translateY(-1px);
+}
+
+.training-start-toggle:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-btn-pressed);
+}
+
+.training-no-routine-message {
+    margin: 0;
+    padding: 12px 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.training-routine-editor {
+    padding: 12px 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.training-routine-editor-days {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.training-routine-editor-day {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.training-routine-editor-day-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.training-routine-editor-day-label-tag {
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.training-routine-editor-label-input,
+.training-routine-editor-name-input {
+    flex: 1;
+    min-width: 90px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.88rem;
+    box-sizing: border-box;
+}
+
+.training-routine-editor-exercise-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.training-routine-editor-exercise-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.training-routine-editor-exercise-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.training-routine-editor-exercise-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+}
+
+.training-routine-editor-exercise-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.training-routine-editor-exercise-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+}
+
+.training-routine-editor-weight-input,
+.training-routine-editor-reps-input,
+.training-routine-editor-sets-input {
+    width: 52px;
+    padding: 8px 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    box-sizing: border-box;
+}
+
+.training-routine-editor-unit {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.training-routine-editor-exercise-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.training-routine-editor-day-move-up:disabled,
+.training-routine-editor-day-move-down:disabled,
+.training-routine-editor-remove-day:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.training-routine-editor-settings {
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.training-routine-editor-rest-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.training-routine-editor-rest-select {
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.85rem;
+}
+
+.training-routine-editor-footer {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.training-routine-editor-save-btn {
+    margin-left: auto;
+    width: auto;
+    padding-left: 24px;
+    padding-right: 24px;
+}
+
+.action-btn {
+    border: 1px solid transparent;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-family: inherit;
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-btn);
+    transition: var(--transition);
+}
+
+.action-btn:hover {
+    transform: translateY(-1px);
+}
+
+.action-btn:active {
+    transform: translateY(1px);
+    box-shadow: var(--shadow-btn-pressed);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.boot-error {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    width: calc(100% - 40px);
+    max-width: 420px;
+    background: #ff3b3b;
+    color: #0a0a0a;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.6;
+    text-align: center;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+    z-index: 10001;
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+
+    .app-main {
+        padding: 20px 16px;
+    }
+
+    .app-header {
+        padding: 16px 18px;
+    }
+
+    .training-card {
+        padding: 4px 14px;
+    }
+}
+
+@keyframes rest-alarm-flash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); border-color: var(--line); }
+    50% { box-shadow: 0 0 0 4px rgba(255, 82, 82, 0.35); border-color: rgba(255, 82, 82, 0.7); }
+}
+
+@keyframes rest-alarm-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
