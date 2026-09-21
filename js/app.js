@@ -1178,6 +1178,12 @@ function initSwipeToReveal(container) {
     }
 
     container.addEventListener('pointerdown', (e) => {
+        // タッチ操作ではスワイプ直後にclickイベントが発火しないことが多く、
+        // その場合justDraggedがconsumeされないまま残ってしまい、次の本当の
+        // タップ(露出した削除ボタンを押す操作)まで誤って握りつぶしてしまう
+        // - 新しい操作の開始時点で必ずリセットし、あくまで「直前の操作の
+        // 直後に来たclick」だけを対象にする。
+        justDragged = false;
         if (openRowEl && !openRowEl.contains(e.target)) {
             closeRow(openRowEl);
         }
