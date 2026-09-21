@@ -14,6 +14,22 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+// A quick, self-dismissing confirmation (e.g. after saving a routine or
+// finishing a workout) - unlike a full notification, nobody needs to read
+// or act on it, so it fades out on its own after ~1.5s rather than sticking
+// around waiting to be dismissed.
+function showQuickToast(text) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-quick';
+    toast.textContent = text;
+    container.appendChild(toast);
+    toast.addEventListener('animationend', (e) => {
+        if (e.animationName === 'toast-fade-out') toast.remove();
+    });
+}
+
 // Pure, dependency-free chart drawing - no DOM references.
 // points: { date: string ("YYYY-MM-DD"), value: number }[], already sorted
 // oldest-first.
@@ -1106,6 +1122,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
             // rest_seconds may have changed) and the editor itself.
             loadTraining();
             loadRoutineManagement();
+            showQuickToast('保存しました');
         } catch (err) {
             console.error('Routine save error:', err);
             alert('ルーティーンの保存に失敗しました。');
@@ -1405,6 +1422,7 @@ async function loadTraining() {
                 clearAllPersistedRestTimers();
                 clearActiveSession();
                 loadTraining();
+                showQuickToast('お疲れ様でした！');
             } catch (err) {
                 console.error('Training save error:', err);
                 alert('記録の保存に失敗しました。');
