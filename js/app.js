@@ -784,7 +784,7 @@ function exerciseSetRowsHtml(exercise, exIndex) {
 // both need to produce the same starting pair of buttons.
 function exerciseActionsHtml(i) {
     return `
-        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">開始</button>
+        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">ワークアウト開始</button>
         <button type="button" class="action-btn training-complete-btn" data-action="ex-complete" data-ex="${i}">完了</button>
     `;
 }
