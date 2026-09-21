@@ -517,8 +517,11 @@ function expandExerciseBlock(block, exIndex, exercise) {
     block.dataset.status = 'expanded';
     body.innerHTML = exerciseSetRowsHtml(exercise, exIndex);
     // Swapped for a way back rather than hidden outright - "開始" with no
-    // undo was the exact complaint this fixes.
+    // undo was the exact complaint this fixes. 完了 moves here too (see
+    // exerciseActionsHtml) - it only makes sense once the exercise is
+    // actually open.
     actions.innerHTML = `
+        <button type="button" class="action-btn training-complete-btn" data-action="ex-complete" data-ex="${exIndex}">完了</button>
         <button type="button" class="action-btn training-collapse-btn" data-action="ex-collapse" data-ex="${exIndex}">閉じる</button>
         ${restStartButtonHtml(exIndex)}
     `;
@@ -781,14 +784,14 @@ function exerciseSetRowsHtml(exercise, exIndex) {
 }
 
 // Shared between the initial render and "閉じる" (collapse-back-to-pending) -
-// both need to produce the same starting pair of buttons. "ワークアウト
-// 開始" belongs only to the card-level toggle (see buildCardHtml) - each
-// individual exercise's own start button is just plain "開始".
+// both need to produce the same starting single button. "ワークアウト開始"
+// belongs only to the card-level toggle (see buildCardHtml) - each
+// individual exercise's own start button is just plain "開始". 完了 only
+// appears once the exercise is actually expanded (see expandExerciseBlock) -
+// showing it alongside 開始 up front implied it could be pressed before any
+// data was entered.
 function exerciseActionsHtml(i) {
-    return `
-        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">開始</button>
-        <button type="button" class="action-btn training-complete-btn" data-action="ex-complete" data-ex="${i}">完了</button>
-    `;
+    return `<button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">開始</button>`;
 }
 
 // Collapsed by default so opening the panel doesn't dump every exercise's
