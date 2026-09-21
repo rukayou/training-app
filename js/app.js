@@ -991,12 +991,25 @@ function routineEditorHtml(days, restSeconds) {
 // Rendered in place of the normal card when there are zero routine days
 // yet. The actual routine-creation UI lives entirely on the ルーティーン
 // 管理 tab (see loadRoutineManagement()) - this card just points there.
+// Step 1 (home-screen install) is shown here, before any routine exists,
+// because it's cheapest to do before there's data worth protecting - once a
+// routine/log exists, this onboarding message is gone for good (no routine
+// count ever goes back to zero on its own).
 function noRoutineMessageHtml() {
     return `
         <div class="training-header">
             <span class="training-title">筋トレルーティーン</span>
         </div>
-        <p class="training-no-routine-message">まだルーティーンがありません。上の「ルーティーン管理」タブから作成できます。</p>
+        <div class="training-onboarding">
+            <p class="training-onboarding-step">
+                <strong>ステップ1: ホーム画面に追加(推奨)</strong><br>
+                Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップしてください。データがこの端末に残りやすくなります(追加しない場合、7日間開かないとデータが消えることがあります)。
+            </p>
+            <p class="training-onboarding-step">
+                <strong>ステップ2: ルーティーンを作成</strong><br>
+                上の「ルーティーン管理」タブから、トレーニングメニューを作成してください。
+            </p>
+        </div>
     `;
 }
 
