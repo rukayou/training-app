@@ -790,6 +790,24 @@ button.btn-primary:active {
     margin-top: 2px;
 }
 
+.training-routine-editor-exercise-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+/* 常時表示の「新規種目」入力欄 - 保存済みの種目行(.training-routine-editor-exercise-row)
+   と見た目で区別できるよう、破線の枠で「まだ確定していない下書き」だと
+   分かるようにする。 */
+.training-routine-editor-exercise-draft {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-sm);
+}
+
 .training-routine-editor-set-list {
     display: flex;
     flex-direction: column;

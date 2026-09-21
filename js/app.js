@@ -970,14 +970,13 @@ function weekStripHtml(logs, todayStr) {
 // drag-and-drop: a day realistically holds a handful of exercises, so
 // pointer-based DnD isn't worth the risk for what two buttons already do.
 
-// Mirrors exerciseActionsHtml's 開始/完了 pair - collapsed shows "編集" in
-// the same neutral training-start-btn color, expanded shows "閉じる" in the
-// same training-collapse-btn color, so the routine editor's accordion reads
-// as visually identical to the real workout card's.
-function routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded) {
-    return expanded
-        ? `<button type="button" class="action-btn training-collapse-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">閉じる</button>`
-        : `<button type="button" class="action-btn training-start-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">編集</button>`;
+// Mirrors exerciseActionsHtml's 開始 button - shown only while collapsed
+// (the expanded/閉じる counterpart now lives at the bottom of the body, see
+// routineExerciseRowHtml), same neutral training-start-btn color so the
+// routine editor's accordion reads as visually identical to the real
+// workout card's.
+function routineExerciseToggleBtnHtml(dayIndex, exIndex) {
+    return `<button type="button" class="action-btn training-start-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">編集</button>`;
 }
 
 // 削除ボタンはデフォルト非表示で、行を左にスワイプした時だけ
@@ -1032,12 +1031,34 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
                 </div>
                 <div class="swipe-row-content training-routine-editor-exercise-header-content">
                     <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim())}</span>
-                    <div class="training-routine-editor-exercise-actions">
-                        ${routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded)}
-                    </div>
+                    ${expanded ? '' : `<div class="training-routine-editor-exercise-actions">${routineExerciseToggleBtnHtml(dayIndex, exIndex)}</div>`}
                 </div>
             </div>
             ${expanded ? routineExerciseBodyHtml(ex, dayIndex, exIndex) : ''}
+            ${expanded ? `
+            <div class="training-routine-editor-exercise-footer">
+                <button type="button" class="action-btn training-collapse-btn" data-action="ex-toggle" data-day="${dayIndex}" data-ex="${exIndex}">閉じる</button>
+            </div>` : ''}
+        </div>
+    `;
+}
+
+function defaultDraft() {
+    return { name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })) };
+}
+
+// ここで受け取るdraftは「まだリストに確定登録されていない新規種目」の
+// 下書き。ここに直接入力し「+ 種目を追加」を押すと確定してリストへ移動し
+// (折りたたみ済みの通常の種目として表示)、この欄自体は空の状態に
+// リセットされて次の入力に備える - 常に画面下部に常駐する点が既存の
+// 種目(展開/折りたたみ切り替え可能)との違い。
+function routineExerciseDraftHtml(draft, dayIndex) {
+    const groups = groupSets(draft.sets);
+    const rows = groups.map((g, i) => routineSetRowHtml(g, dayIndex, 'draft', i, groups.length > 1)).join('');
+    return `
+        <div class="training-routine-editor-exercise-draft">
+            <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(draft.name)}" placeholder="種目名">
+            <div class="training-routine-editor-set-list">${rows}</div>
         </div>
     `;
 }
@@ -1058,6 +1079,7 @@ function routineDayBlockHtml(day, dayIndex, days) {
                 </div>
             </div>
             <div class="training-routine-editor-exercise-list">${rows}</div>
+            ${routineExerciseDraftHtml(day.draft, dayIndex)}
             <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>
         </div>
     `;
@@ -1128,34 +1150,51 @@ function noRoutineMessageHtml() {
 // save and, before any structural mutation (add/remove/move), to capture
 // whatever's been typed into OTHER rows so it isn't lost when the whole
 // editor gets re-rendered.
+// Each group row expands back into its `count` identical flat sets - the
+// saved shape (ex.sets) is always the flat array, grouping is purely a
+// rendering/editing convenience. Shared between real exercises and the
+// always-open draft row, which use the exact same set-row markup.
+function readSetsFromGroupRows(groupRows, fallbackSets) {
+    return groupRows.length > 0
+        ? Array.from(groupRows).flatMap((groupRow) => {
+            const weight = Number(groupRow.querySelector('.training-routine-editor-weight-select').value);
+            const reps = Number(groupRow.querySelector('.training-routine-editor-reps-select').value);
+            const count = Number(groupRow.querySelector('.training-routine-editor-count-select').value);
+            return Array.from({ length: count }, () => ({ weight, reps }));
+        })
+        : (fallbackSets ?? [{ weight: 0, reps: 8 }]);
+}
+
 function readEditorStateFromDom(editorEl, fallbackDays) {
-    return Array.from(editorEl.querySelectorAll('.training-routine-editor-day')).map((dayEl, dayIndex) => ({
-        label: dayEl.querySelector('.training-routine-editor-label-input').value,
-        exercises: Array.from(dayEl.querySelectorAll('.training-routine-editor-exercise-row')).map((row, exIndex) => {
-            // A collapsed row has no input fields in the DOM at all - fall
-            // back to whatever this exercise already held rather than
-            // reading from nodes that don't exist.
-            const fallback = fallbackDays?.[dayIndex]?.exercises?.[exIndex];
-            const nameInput = row.querySelector('.training-routine-editor-name-input');
-            const groupRows = row.querySelectorAll('.training-routine-editor-set-row');
-            // Each group row expands back into its `count` identical flat
-            // sets - the saved shape (ex.sets) is always the flat array,
-            // grouping is purely a rendering/editing convenience.
-            const sets = groupRows.length > 0
-                ? Array.from(groupRows).flatMap((groupRow) => {
-                    const weight = Number(groupRow.querySelector('.training-routine-editor-weight-select').value);
-                    const reps = Number(groupRow.querySelector('.training-routine-editor-reps-select').value);
-                    const count = Number(groupRow.querySelector('.training-routine-editor-count-select').value);
-                    return Array.from({ length: count }, () => ({ weight, reps }));
-                })
-                : (fallback?.sets ?? [{ weight: 0, reps: 8 }]);
-            return {
-                name: nameInput ? nameInput.value : (fallback?.name ?? ''),
-                sets,
-                expanded: row.dataset.expanded === 'true',
-            };
-        }),
-    }));
+    return Array.from(editorEl.querySelectorAll('.training-routine-editor-day')).map((dayEl, dayIndex) => {
+        const fallbackDay = fallbackDays?.[dayIndex];
+        // The draft is always in the DOM (never collapsed), but fall back
+        // defensively the same way exercises do.
+        const draftEl = dayEl.querySelector('.training-routine-editor-exercise-draft');
+        const draft = draftEl
+            ? {
+                name: draftEl.querySelector('.training-routine-editor-name-input').value,
+                sets: readSetsFromGroupRows(draftEl.querySelectorAll('.training-routine-editor-set-row'), fallbackDay?.draft?.sets),
+            }
+            : (fallbackDay?.draft ?? defaultDraft());
+        return {
+            label: dayEl.querySelector('.training-routine-editor-label-input').value,
+            exercises: Array.from(dayEl.querySelectorAll('.training-routine-editor-exercise-row')).map((row, exIndex) => {
+                // A collapsed row has no input fields in the DOM at all - fall
+                // back to whatever this exercise already held rather than
+                // reading from nodes that don't exist.
+                const fallback = fallbackDay?.exercises?.[exIndex];
+                const nameInput = row.querySelector('.training-routine-editor-name-input');
+                const groupRows = row.querySelectorAll('.training-routine-editor-set-row');
+                return {
+                    name: nameInput ? nameInput.value : (fallback?.name ?? ''),
+                    sets: readSetsFromGroupRows(groupRows, fallback?.sets),
+                    expanded: row.dataset.expanded === 'true',
+                };
+            }),
+            draft,
+        };
+    });
 }
 
 // 削除ボタンをデフォルトでは隠し、行(.swipe-row)を左にスワイプした時だけ
@@ -1345,7 +1384,12 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         }
 
         const dayIndex = Number(btn.dataset.day);
-        const exIndex = Number(btn.dataset.ex);
+        // The persistent draft composer's own set-rows carry data-ex="draft"
+        // instead of a real exercise index (readSetsFromGroupRows/set-add/
+        // set-remove don't care which exercise they're touching, only
+        // whether it's the draft or a committed one).
+        const isDraft = btn.dataset.ex === 'draft';
+        const exIndex = isDraft ? null : Number(btn.dataset.ex);
         const groupIndex = Number(btn.dataset.group);
         // Capture whatever's currently typed into every row before mutating
         // the structure, so an add/remove/move elsewhere doesn't blow away
@@ -1356,7 +1400,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         if (restSelectEl) restSeconds = Number(restSelectEl.value);
 
         if (action === 'day-add') {
-            days.push({ label: '', exercises: [{ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true }] });
+            days.push({ label: '', exercises: [], draft: defaultDraft() });
         } else if (action === 'day-remove') {
             if (days.length <= 1) {
                 alert('少なくとも1つはルーティーンが必要です。');
@@ -1368,7 +1412,11 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         } else if (action === 'day-move-down' && dayIndex < days.length - 1) {
             [days[dayIndex], days[dayIndex + 1]] = [days[dayIndex + 1], days[dayIndex]];
         } else if (action === 'ex-add') {
-            days[dayIndex].exercises.push({ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true });
+            // 常時表示の下書き(draft)をそのままリストへ確定登録し(折りた
+            // たみ済みの通常の種目として表示)、下書き欄自体は空の状態に
+            // リセットして次の入力に備える。
+            days[dayIndex].exercises.push({ ...days[dayIndex].draft, expanded: false });
+            days[dayIndex].draft = defaultDraft();
         } else if (action === 'ex-remove') {
             days[dayIndex].exercises.splice(exIndex, 1);
         } else if (action === 'ex-toggle') {
@@ -1379,18 +1427,18 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
             // ピラミッドセットの新しい段として独立編集できなくなるため。
             // 単に同じセットを増やしたいだけなら、追加後に重量を1つ戻せば
             // 元のグループへまとまる。
-            const sets = days[dayIndex].exercises[exIndex].sets;
+            const sets = isDraft ? days[dayIndex].draft.sets : days[dayIndex].exercises[exIndex].sets;
             const prev = sets[sets.length - 1];
             sets.push({ weight: Math.max(0, prev.weight - 1), reps: prev.reps });
         } else if (action === 'set-remove') {
             // グループ単位の削除 - そのグループが占めるフラット配列の区間
             // (それより前のグループのcount合計〜自身のcount分)を丸ごと消す。
-            const ex = days[dayIndex].exercises[exIndex];
-            const groups = groupSets(ex.sets);
+            const target = isDraft ? days[dayIndex].draft : days[dayIndex].exercises[exIndex];
+            const groups = groupSets(target.sets);
             if (groups.length <= 1) return; // ボタン自体もdisabledだが念のため
             let start = 0;
             for (let i = 0; i < groupIndex; i++) start += groups[i].count;
-            ex.sets.splice(start, groups[groupIndex].count);
+            target.sets.splice(start, groups[groupIndex].count);
         }
         render();
     });
@@ -1451,8 +1499,8 @@ async function loadRoutineManagement() {
         const trainingState = loadState();
         const routines = loadRoutines();
         const initialDays = routines.length > 0
-            ? routines.map((r) => ({ label: r.label || '', exercises: r.exercises.map((ex) => ({ ...ex, expanded: false })) }))
-            : [{ label: '', exercises: [{ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true }] }];
+            ? routines.map((r) => ({ label: r.label || '', exercises: r.exercises.map((ex) => ({ ...ex, expanded: false })), draft: defaultDraft() }))
+            : [{ label: '', exercises: [], draft: defaultDraft() }];
         initRoutineEditor(container, { initialDays, trainingState });
     } catch (e) {
         console.error('Routine management load error:', e);
