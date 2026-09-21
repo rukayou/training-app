@@ -858,7 +858,7 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
         <div class="training-list hidden">
             <form class="training-form">
                 ${exerciseBlocks}
-                <button type="submit" class="btn-primary training-save-btn">保存する</button>
+                <button type="submit" class="btn-primary training-save-btn">ワークアウト終了</button>
             </form>
             <div class="training-chart-section">
                 <select class="training-exercise-select">${selectOptions}</select>
@@ -1255,7 +1255,6 @@ async function loadTraining() {
 
         const toggleBtn = container.querySelector('.training-start-toggle');
         const list = container.querySelector('.training-list');
-        const saveBtn = container.querySelector('.training-save-btn');
         const durationEl = container.querySelector('.training-metric-value[data-metric="duration"]');
         toggleBtn.addEventListener('click', () => {
             const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
@@ -1320,7 +1319,6 @@ async function loadTraining() {
                 // 何もしない)。
                 if (!loadActiveSession()) {
                     startActiveSession();
-                    if (saveBtn) saveBtn.textContent = '終了';
                     startSessionTimer(Date.now(), durationEl);
                 }
             } else if (action === 'ex-collapse') {
@@ -1413,14 +1411,13 @@ async function loadTraining() {
         resumePersistedRestTimers(form, routine.exercises);
 
         // ページを開き直した/再レンダーされた時点でまだセッション進行中なら
-        // (=保存せずにリロードした)、カードを展開状態・「終了」表示に復元し、
-        // 経過時間は永続化されたstartedAtから正しく再計算して続行する。
+        // (=保存せずにリロードした)、カードを展開状態に復元し、経過時間は
+        // 永続化されたstartedAtから正しく再計算して続行する。
         const activeSession = loadActiveSession();
         if (activeSession) {
             toggleBtn.setAttribute('aria-expanded', 'true');
             list.classList.remove('hidden');
             container.classList.add('expanded');
-            if (saveBtn) saveBtn.textContent = '終了';
             startSessionTimer(activeSession.startedAt, durationEl);
         }
     } catch (e) {
