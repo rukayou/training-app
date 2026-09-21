@@ -116,6 +116,21 @@ function jstDaysBetween(fromDateStr, toDateStr) {
     return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000);
 }
 
+// The 7 "YYYY-MM-DD" strings for the current JST week (Sun-Sat) containing
+// todayStr. Built entirely from date-string arithmetic (like jstDaysBetween
+// above) rather than a raw `new Date(todayStr)` - that would parse in the
+// browser's local timezone, not JST, and silently pick the wrong week near
+// a JST day boundary.
+function jstWeekDates(todayStr) {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const todayUtcMs = Date.UTC(y, m - 1, d);
+    const weekday = new Date(todayUtcMs).getUTCDay(); // 0 = Sunday
+    return Array.from({ length: 7 }, (_, i) => {
+        const dt = new Date(todayUtcMs + (i - weekday) * 86400000);
+        return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+    });
+}
+
 const DEFAULT_REST_SECONDS = 90;
 const REST_ADJUST_SECONDS = 15;
 const ALARM_REPEAT_MS = 1200;
@@ -235,6 +250,39 @@ function clearPersistedRestTimer(exIndex) {
 function clearAllPersistedRestTimers() {
     try {
         localStorage.removeItem(REST_TIMER_STORAGE_KEY);
+    } catch (e) {
+        // ignore
+    }
+}
+
+// The overall "今日のトレーニング" card's session timer - separate from the
+// per-exercise rest timers above, and only ever one at a time (unlike
+// restTimers, which is keyed per exercise). Same wall-clock-timestamp
+// philosophy: a mid-session reload must not lose elapsed time, so the
+// source of truth is the absolute start timestamp in localStorage, not a
+// running JS interval alone.
+const ACTIVE_SESSION_STORAGE_KEY = 'training_active_session';
+
+function loadActiveSession() {
+    try {
+        return JSON.parse(localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY) || 'null');
+    } catch (e) {
+        return null;
+    }
+}
+
+function startActiveSession() {
+    try {
+        localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, JSON.stringify({ startedAt: Date.now() }));
+    } catch (e) {
+        // ignore - a session timer that doesn't survive a reload in that
+        // case is a minor degradation, not worth surfacing to the user.
+    }
+}
+
+function clearActiveSession() {
+    try {
+        localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     } catch (e) {
         // ignore
     }
@@ -529,6 +577,32 @@ function stopAllRestTimers() {
     syncCardAlarmClass();
 }
 
+// The overall session timer's live JS interval - only ever one at a time
+// (unlike restTimers' per-exercise Map), ticking the トレーニング時間
+// metric while a workout is in progress. Interval-only, like stopRestTimer:
+// localStorage (ACTIVE_SESSION_STORAGE_KEY) stays the source of truth for
+// "is a session running and when did it start" so it survives a re-render
+// or a reload.
+let sessionTimerIntervalId = null;
+
+function stopSessionTimerDisplay() {
+    if (sessionTimerIntervalId !== null) {
+        clearInterval(sessionTimerIntervalId);
+        sessionTimerIntervalId = null;
+    }
+}
+
+function startSessionTimer(startedAt, durationEl) {
+    stopSessionTimerDisplay();
+    if (!durationEl) return;
+    const tick = () => {
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        durationEl.textContent = formatRestTime(elapsedSeconds);
+    };
+    tick();
+    sessionTimerIntervalId = setInterval(tick, 1000);
+}
+
 // The one place "the user wants this exercise's rest to stop" is actually
 // carried out - used by ✕, 停止, and 閉じる alike. Deliberately does NOT
 // go through restTimers.get(exIndex)?.cancel(): that silently no-ops if the
@@ -732,7 +806,31 @@ function exerciseBlockHtml(ex, i) {
     `;
 }
 
-function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise }) {
+// The reference design's カロリー slot has no equivalent data source here
+// (no nutrition tracking), so it's replaced with 種目数/セット数 - both are
+// real numbers this app already has. 運動部位 isn't repeated either since
+// the title above already shows the routine's label.
+function trainingMetricsRowHtml(todayLog) {
+    const totalSets = todayLog ? todayLog.exercises.reduce((sum, ex) => sum + ex.sets.length, 0) : null;
+    const metrics = [
+        { key: 'duration', label: 'トレーニング時間', value: todayLog?.duration_minutes ? `${todayLog.duration_minutes}分` : '-' },
+        { key: 'volume', label: '総ボリューム', value: todayLog ? `${todayLog.volume}kg` : '-' },
+        { key: 'exercises', label: '種目数', value: todayLog ? `${todayLog.exercises.length}種目` : '-' },
+        { key: 'sets', label: 'セット数', value: todayLog ? `${totalSets}セット` : '-' },
+    ];
+    return `
+        <div class="training-metrics-row">
+            ${metrics.map((m) => `
+                <div class="training-metric">
+                    <span class="training-metric-value" data-metric="${m.key}">${escapeHtml(m.value)}</span>
+                    <span class="training-metric-label">${escapeHtml(m.label)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog }) {
     const countHtml = isOverdue
         ? `⚠️ ${overdueDays}日以上お休み中`
         : '開始';
@@ -745,9 +843,12 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
 
     return `
         <div class="training-header">
-            <span class="training-title">${escapeHtml(label)} ・ 通算${pendingSessionNumber}日目</span>
+            <div class="training-header-top">
+                <span class="training-title">${escapeHtml(label)} ・ 通算${pendingSessionNumber}日目</span>
+            </div>
+            ${trainingMetricsRowHtml(todayLog)}
             <div class="training-header-actions">
-                <button type="button" class="training-start-toggle ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
+                <button type="button" class="training-start-toggle training-status-pill ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
                     ${countHtml} <span class="training-chevron">▾</span>
                 </button>
             </div>
@@ -763,6 +864,27 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
             </div>
         </div>
     `;
+}
+
+// A week's worth of day cells (JST Sun-Sat), today highlighted, with a dot
+// under any day that already has a training_logs entry. Purely informational
+// - unlike a real calendar app there's no per-day drilldown to click into,
+// since this app only ever shows "today"'s session.
+function weekStripHtml(logs, todayStr) {
+    const loggedDates = new Set(logs.map((l) => l.date));
+    const weekdayLabels = ['日', '月', '火', '水', '木', '金', '土'];
+    return jstWeekDates(todayStr).map((dateStr, i) => {
+        const dayNum = Number(dateStr.split('-')[2]);
+        const isToday = dateStr === todayStr;
+        const hasLog = loggedDates.has(dateStr);
+        return `
+            <div class="week-strip-day ${isToday ? 'is-today' : ''}">
+                <span class="week-strip-weekday">${weekdayLabels[i]}</span>
+                <span class="week-strip-date">${dayNum}</span>
+                <span class="week-strip-dot" style="visibility:${hasLog ? 'visible' : 'hidden'}"></span>
+            </div>
+        `;
+    }).join('');
 }
 
 // --- Routine editor (add/remove/reorder days & exercises, edit
@@ -1073,12 +1195,21 @@ async function loadTraining() {
     // Any rest timer from a previous render (e.g. this is the re-render
     // loadTraining() triggers right after a save) is about to lose its DOM
     // to the innerHTML rebuild below - stop it explicitly rather than
-    // leaving an orphaned interval ticking against detached nodes.
+    // leaving an orphaned interval ticking against detached nodes. Same for
+    // the overall session timer's display interval.
     stopAllRestTimers();
+    stopSessionTimerDisplay();
 
     try {
         const trainingState = loadState();
         const routines = loadRoutines();
+        const logs = loadLogs();
+        const todayStr = jstDateString();
+
+        // Rendered unconditionally, even with zero routines - purely
+        // informational, doesn't depend on there being a routine to show.
+        const weekStripEl = document.getElementById('weekStrip');
+        if (weekStripEl) weekStripEl.innerHTML = weekStripHtml(logs, todayStr);
 
         if (routines.length === 0) {
             // No routine created yet - point at the ルーティーン管理 tab,
@@ -1093,27 +1224,40 @@ async function loadTraining() {
         const routine = routines[day - 1];
 
         const isOverdue = trainingState.last_workout_date !== null
-            && jstDaysBetween(trainingState.last_workout_date, jstDateString()) >= trainingState.alert_threshold_days;
-        const overdueDays = isOverdue ? jstDaysBetween(trainingState.last_workout_date, jstDateString()) : 0;
+            && jstDaysBetween(trainingState.last_workout_date, todayStr) >= trainingState.alert_threshold_days;
+        const overdueDays = isOverdue ? jstDaysBetween(trainingState.last_workout_date, todayStr) : 0;
 
         const exerciseNames = [...new Set(routines.flatMap((r) => r.exercises.map((e) => e.name)))];
         const chartExercise = routine.exercises[0]?.name || exerciseNames[0];
 
-        const logs = loadLogs();
+        const todayLog = logs.filter((l) => l.date === todayStr).pop() || null;
 
         container.innerHTML = buildCardHtml({
             label: routine.label || `ルーティーン${day}`, pendingSessionNumber, isOverdue, overdueDays,
-            exercises: routine.exercises, exerciseNames, chartExercise,
+            exercises: routine.exercises, exerciseNames, chartExercise, todayLog,
         });
         container.classList.remove('hidden');
 
         const toggleBtn = container.querySelector('.training-start-toggle');
         const list = container.querySelector('.training-list');
+        const saveBtn = container.querySelector('.training-save-btn');
+        const durationEl = container.querySelector('.training-metric-value[data-metric="duration"]');
         toggleBtn.addEventListener('click', () => {
             const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-            toggleBtn.setAttribute('aria-expanded', String(!expanded));
+            const nowExpanded = !expanded;
+            toggleBtn.setAttribute('aria-expanded', String(nowExpanded));
             list.classList.toggle('hidden', expanded);
-            container.classList.toggle('expanded', !expanded);
+            container.classList.toggle('expanded', nowExpanded);
+
+            // 折りたたみ→展開への遷移が「トレーニング開始」に相当する。
+            // 展開→折りたたみ時は何もしない(メトリクス行はヘッダー内にあり
+            // .training-listの折りたたみと無関係に表示され続けるため、
+            // タイマーは裏で動き続けて問題ない)。
+            if (nowExpanded && !loadActiveSession()) {
+                startActiveSession();
+                if (saveBtn) saveBtn.textContent = '終了';
+                startSessionTimer(Date.now(), durationEl);
+            }
         });
 
         const chartWrap = container.querySelector('.training-chart-wrap');
@@ -1207,6 +1351,10 @@ async function loadTraining() {
             const volume = sessionVolume(exercises);
             const newCount = pendingSessionNumber;
 
+            const activeSession = loadActiveSession();
+            const elapsedMs = activeSession ? Date.now() - activeSession.startedAt : 0;
+            const duration_minutes = elapsedMs > 0 ? Math.max(1, Math.round(elapsedMs / 60000)) : 0;
+
             try {
                 appendLog({
                     day,
@@ -1215,6 +1363,7 @@ async function loadTraining() {
                     total_workout_count: newCount,
                     exercises: logExercises,
                     volume,
+                    duration_minutes,
                 });
 
                 saveState({
@@ -1237,6 +1386,7 @@ async function loadTraining() {
                 }
 
                 clearAllPersistedRestTimers();
+                clearActiveSession();
                 loadTraining();
             } catch (err) {
                 console.error('Training save error:', err);
@@ -1245,6 +1395,18 @@ async function loadTraining() {
         });
 
         resumePersistedRestTimers(form, routine.exercises);
+
+        // ページを開き直した/再レンダーされた時点でまだセッション進行中なら
+        // (=保存せずにリロードした)、カードを展開状態・「終了」表示に復元し、
+        // 経過時間は永続化されたstartedAtから正しく再計算して続行する。
+        const activeSession = loadActiveSession();
+        if (activeSession) {
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            list.classList.remove('hidden');
+            container.classList.add('expanded');
+            if (saveBtn) saveBtn.textContent = '終了';
+            startSessionTimer(activeSession.startedAt, durationEl);
+        }
     } catch (e) {
         console.error('Training load error:', e);
         renderError(container);
