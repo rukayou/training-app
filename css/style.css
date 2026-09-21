@@ -1227,6 +1227,10 @@ body {
     border-radius: var(--radius-sm);
 }
 
+/* 幅76pxはスワイプ判定(スナップ位置)に直結するので据え置き。
+   visibility はレイアウトに影響しないので判定には無関係 - スワイプ中
+   以外は描画しないことで、角丸クリップのアンチエイリアス越しに赤が
+   行の右端へにじむのを防ぐ。 */
 .swipe-row-actions {
     position: absolute;
     top: 0;
@@ -1236,6 +1240,11 @@ body {
     display: flex;
     align-items: stretch;
     z-index: 0;
+    visibility: hidden;
+}
+
+.swipe-row.is-swiping > .swipe-row-actions {
+    visibility: visible;
 }
 
 .swipe-row-delete-btn {

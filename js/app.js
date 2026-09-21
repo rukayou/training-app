@@ -1351,17 +1351,28 @@ function readEditorStateFromDom(editorEl, fallbackDays) {
 // render()がinnerHTMLを丸ごと差し替えても再アタッチ不要 - 差し替え後は
 // 単に「今は何も開いていない」状態から始まるだけで実害はない。
 const SWIPE_DRAG_THRESHOLD_PX = 10;
+// .swipe-row-content の transition (0.2s) より少しだけ長く取る。
+const SWIPE_CLOSE_HIDE_DELAY_MS = 260;
 
 function initSwipeToReveal(container) {
     let openRowEl = null;
     let drag = null;
     let justDragged = false;
 
+    // 閉じるアニメーション(0.2s)が終わってから赤パネルを消す。すぐ消すと
+    // 行が戻りきる前に赤だけ瞬間的に消えて不自然に見える。
+    function hideActionsWhenClosed(rowEl) {
+        window.setTimeout(() => {
+            if (openRowEl !== rowEl) rowEl.classList.remove('is-swiping');
+        }, SWIPE_CLOSE_HIDE_DELAY_MS);
+    }
+
     function closeRow(rowEl) {
         if (!rowEl) return;
         const content = rowEl.querySelector(':scope > .swipe-row-content');
         if (content) content.style.transform = 'translateX(0)';
         if (openRowEl === rowEl) openRowEl = null;
+        hideActionsWhenClosed(rowEl);
     }
 
     container.addEventListener('pointerdown', (e) => {
@@ -1398,6 +1409,10 @@ function initSwipeToReveal(container) {
         if (!drag.dragging) {
             if (Math.abs(dx) < SWIPE_DRAG_THRESHOLD_PX || Math.abs(dx) <= Math.abs(dy)) return;
             drag.dragging = true;
+            // 赤いパネルは普段 visibility:hidden。スワイプが始まって初めて
+            // 描画する - 常時描画していると角丸クリップのアンチエイリアスで
+            // 行の右端に赤い線がにじんで見えてしまうため。
+            drag.rowEl.classList.add('is-swiping');
             drag.contentEl.style.transition = 'none';
             drag.contentEl.setPointerCapture?.(drag.pointerId);
         }
@@ -1418,10 +1433,12 @@ function initSwipeToReveal(container) {
         if (openRowEl && openRowEl !== current.rowEl) closeRow(openRowEl);
         if (shouldOpen) {
             current.contentEl.style.transform = `translateX(-${current.actionsWidth}px)`;
+            current.rowEl.classList.add('is-swiping');
             openRowEl = current.rowEl;
         } else {
             current.contentEl.style.transform = 'translateX(0)';
             if (openRowEl === current.rowEl) openRowEl = null;
+            hideActionsWhenClosed(current.rowEl);
         }
         justDragged = true;
     }
