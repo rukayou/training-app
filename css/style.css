@@ -482,9 +482,10 @@ button.btn-primary:active {
     width: 62px;
 }
 
-.training-set-row input[type="number"] {
-    width: 56px;
-    padding: 8px 10px;
+.training-weight-input,
+.training-reps-input {
+    width: 60px;
+    padding: 8px 6px;
     border: 1px solid var(--line);
     background: var(--surface-soft);
     color: var(--text-main);
@@ -495,7 +496,8 @@ button.btn-primary:active {
     transition: var(--transition);
 }
 
-.training-set-row input[type="number"]:focus {
+.training-weight-input:focus,
+.training-reps-input:focus {
     outline: none;
     border-color: var(--accent);
     background: #262626;
@@ -739,7 +741,13 @@ button.btn-primary:active {
     margin-top: 2px;
 }
 
-.training-routine-editor-exercise-fields {
+.training-routine-editor-set-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.training-routine-editor-set-row {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -747,17 +755,35 @@ button.btn-primary:active {
     font-size: 0.82rem;
 }
 
-.training-routine-editor-weight-input,
-.training-routine-editor-reps-input,
-.training-routine-editor-sets-input {
-    width: 52px;
-    padding: 8px 8px;
+.training-routine-editor-set-label {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    width: 62px;
+}
+
+.training-routine-editor-weight-select,
+.training-routine-editor-reps-select {
+    width: 60px;
+    padding: 8px 6px;
     border: 1px solid var(--line);
     background: var(--surface-soft);
     color: var(--text-main);
     border-radius: var(--radius-sm);
     font-family: inherit;
     box-sizing: border-box;
+}
+
+.training-routine-editor-remove-set {
+    margin-left: auto;
+}
+
+.training-routine-editor-remove-set:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.training-routine-editor-add-set {
+    align-self: flex-start;
 }
 
 .training-routine-editor-unit {

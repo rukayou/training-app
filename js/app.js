@@ -183,14 +183,30 @@ function saveState(partial) {
     writeJSON(LS_STATE_KEY, merged);
     return merged;
 }
+// Old-format exercises (default_weight/target_reps/target_sets, identical
+// across every set) migrate to the new per-set sets:[{weight,reps}] shape
+// lazily, right here on read - no one-time migration script. The next save
+// (routine editor or a PB bump) always writes the new shape, so in practice
+// a routine only ever passes through this branch once.
+function normalizeExerciseSets(ex) {
+    if (Array.isArray(ex.sets)) return ex;
+    const weight = ex.default_weight ?? 0;
+    const reps = ex.target_reps ?? 8;
+    const count = ex.target_sets ?? 1;
+    return { name: ex.name, sets: Array.from({ length: count }, () => ({ weight, reps })) };
+}
+
 function loadRoutines() {
-    return readJSON(LS_ROUTINES_KEY, []);
+    return readJSON(LS_ROUTINES_KEY, []).map((day) => ({
+        ...day,
+        exercises: day.exercises.map(normalizeExerciseSets),
+    }));
 }
 function saveRoutines(days) {
     writeJSON(LS_ROUTINES_KEY, days.map((d) => ({
         label: d.label,
-        exercises: d.exercises.map(({ name, default_weight, target_reps, target_sets }) =>
-            ({ name, default_weight, target_reps, target_sets })), // 一時フィールドexpandedを除外
+        exercises: d.exercises.map(({ name, sets }) =>
+            ({ name, sets: sets.map(({ weight, reps }) => ({ weight, reps })) })), // 一時フィールドexpandedを除外
     })));
 }
 function updateRoutineDayExercises(day, exercises) {
@@ -783,17 +799,33 @@ function renderError(container) {
     container.classList.remove('hidden');
 }
 
+// Same "always include the current value, even off-grid" safety net as
+// routineRestSelectHtml below - old 0.5kg-step data, or any legacy/hand-
+// edited value outside the normal range, still shows up correctly instead
+// of silently snapping to the nearest option.
+const WEIGHT_SELECT_MAX_KG = 200;
+function weightSelectHtml(value, attrs) {
+    const options = new Set(Array.from({ length: WEIGHT_SELECT_MAX_KG + 1 }, (_, i) => i));
+    options.add(value);
+    const sorted = [...options].sort((a, b) => a - b);
+    return `<select ${attrs}>${sorted.map((w) => `<option value="${w}" ${w === value ? 'selected' : ''}>${w}</option>`).join('')}</select>`;
+}
+
+const REPS_SELECT_MAX = 30;
+function repsSelectHtml(value, attrs) {
+    const options = new Set(Array.from({ length: REPS_SELECT_MAX }, (_, i) => i + 1));
+    options.add(value);
+    const sorted = [...options].sort((a, b) => a - b);
+    return `<select ${attrs}>${sorted.map((r) => `<option value="${r}" ${r === value ? 'selected' : ''}>${r}</option>`).join('')}</select>`;
+}
+
 function exerciseSetRowsHtml(exercise, exIndex) {
-    return Array.from({ length: exercise.target_sets }, (_, setIndex) => `
+    return exercise.sets.map((set, setIndex) => `
         <div class="training-set-row">
             <span class="training-set-label">${setIndex + 1}セット目</span>
-            <input type="number" step="0.5" min="0" class="training-weight-input"
-                   data-ex="${exIndex}" data-set="${setIndex}"
-                   value="${exercise.default_weight}">
+            ${weightSelectHtml(set.weight, `class="training-weight-input" data-ex="${exIndex}" data-set="${setIndex}"`)}
             <span class="training-set-unit">kg ×</span>
-            <input type="number" step="1" min="0" class="training-reps-input"
-                   data-ex="${exIndex}" data-set="${setIndex}"
-                   value="${exercise.target_reps}">
+            ${repsSelectHtml(set.reps, `class="training-reps-input" data-ex="${exIndex}" data-set="${setIndex}"`)}
             <span class="training-set-unit">回</span>
         </div>
     `).join('');
@@ -925,18 +957,29 @@ function routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded) {
 
 // Only rendered when expanded - mirrors .training-exercise-body, which stays
 // empty (no DOM at all) while collapsed rather than just visually hidden.
+function routineSetRowHtml(set, dayIndex, exIndex, setIndex, removable) {
+    return `
+        <div class="training-routine-editor-set-row" data-set="${setIndex}">
+            <span class="training-routine-editor-set-label">${setIndex + 1}セット目</span>
+            ${weightSelectHtml(set.weight, `class="training-routine-editor-weight-select" data-set="${setIndex}"`)}
+            <span class="training-routine-editor-unit">kg ×</span>
+            ${repsSelectHtml(set.reps, `class="training-routine-editor-reps-select" data-set="${setIndex}"`)}
+            <span class="training-routine-editor-unit">回</span>
+            <button type="button" class="action-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-set="${setIndex}" ${removable ? '' : 'disabled'}>削除</button>
+        </div>
+    `;
+}
+
+// セットごとに重量・回数を分ける人(ピラミッドセット等)のため、"重量×回数×
+// セット数"という単一の組ではなく、セット単位の行のリストにした - セット数
+// という独立した概念は無くなり、行の数がそのままセット数になる。
 function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
+    const rows = ex.sets.map((set, i) => routineSetRowHtml(set, dayIndex, exIndex, i, ex.sets.length > 1)).join('');
     return `
         <div class="training-routine-editor-exercise-body">
             <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
-            <div class="training-routine-editor-exercise-fields">
-                <input type="number" step="0.5" min="0" class="training-routine-editor-weight-input" value="${ex.default_weight}">
-                <span class="training-routine-editor-unit">kg ×</span>
-                <input type="number" step="1" min="1" class="training-routine-editor-reps-input" value="${ex.target_reps}">
-                <span class="training-routine-editor-unit">回 ×</span>
-                <input type="number" step="1" min="1" class="training-routine-editor-sets-input" value="${ex.target_sets}">
-                <span class="training-routine-editor-unit">セット</span>
-            </div>
+            <div class="training-routine-editor-set-list">${rows}</div>
+            <button type="button" class="action-btn training-routine-editor-add-set" data-action="set-add" data-day="${dayIndex}" data-ex="${exIndex}">+ セットを追加</button>
         </div>
     `;
 }
@@ -1048,14 +1091,16 @@ function readEditorStateFromDom(editorEl, fallbackDays) {
             // reading from nodes that don't exist.
             const fallback = fallbackDays?.[dayIndex]?.exercises?.[exIndex];
             const nameInput = row.querySelector('.training-routine-editor-name-input');
-            const weightInput = row.querySelector('.training-routine-editor-weight-input');
-            const repsInput = row.querySelector('.training-routine-editor-reps-input');
-            const setsInput = row.querySelector('.training-routine-editor-sets-input');
+            const setRows = row.querySelectorAll('.training-routine-editor-set-row');
+            const sets = setRows.length > 0
+                ? Array.from(setRows).map((setRow) => ({
+                    weight: Number(setRow.querySelector('.training-routine-editor-weight-select').value),
+                    reps: Number(setRow.querySelector('.training-routine-editor-reps-select').value),
+                }))
+                : (fallback?.sets ?? [{ weight: 0, reps: 8 }]);
             return {
                 name: nameInput ? nameInput.value : (fallback?.name ?? ''),
-                default_weight: weightInput ? Number(weightInput.value) : (fallback?.default_weight ?? 0),
-                target_reps: repsInput ? Number(repsInput.value) : (fallback?.target_reps ?? 1),
-                target_sets: setsInput ? Number(setsInput.value) : (fallback?.target_sets ?? 1),
+                sets,
                 expanded: row.dataset.expanded === 'true',
             };
         }),
@@ -1092,12 +1137,12 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
                 let message = null;
                 if (!ex.name.trim()) {
                     message = '種目名を入力してください。';
-                } else if (!Number.isFinite(ex.default_weight) || ex.default_weight < 0) {
+                } else if (ex.sets.length < 1) {
+                    message = '少なくとも1つはセットが必要です。';
+                } else if (ex.sets.some((s) => !Number.isFinite(s.weight) || s.weight < 0)) {
                     message = '重量は0以上の数値で入力してください。';
-                } else if (!Number.isInteger(ex.target_reps) || ex.target_reps < 1) {
+                } else if (ex.sets.some((s) => !Number.isInteger(s.reps) || s.reps < 1)) {
                     message = '回数は1以上の整数で入力してください。';
-                } else if (!Number.isInteger(ex.target_sets) || ex.target_sets < 1) {
-                    message = 'セット数は1以上の整数で入力してください。';
                 }
                 if (message) {
                     // A collapsed row's invalid value would otherwise be
@@ -1142,6 +1187,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
 
         const dayIndex = Number(btn.dataset.day);
         const exIndex = Number(btn.dataset.ex);
+        const setIndex = Number(btn.dataset.set);
         // Capture whatever's currently typed into every row before mutating
         // the structure, so an add/remove/move elsewhere doesn't blow away
         // an in-progress edit in an unrelated row. Same reasoning for the
@@ -1151,7 +1197,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         if (restSelectEl) restSeconds = Number(restSelectEl.value);
 
         if (action === 'day-add') {
-            days.push({ label: '', exercises: [{ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true }] });
+            days.push({ label: '', exercises: [{ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true }] });
         } else if (action === 'day-remove') {
             if (days.length <= 1) {
                 alert('少なくとも1つはルーティーンが必要です。');
@@ -1163,11 +1209,21 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         } else if (action === 'day-move-down' && dayIndex < days.length - 1) {
             [days[dayIndex], days[dayIndex + 1]] = [days[dayIndex + 1], days[dayIndex]];
         } else if (action === 'ex-add') {
-            days[dayIndex].exercises.push({ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true });
+            days[dayIndex].exercises.push({ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true });
         } else if (action === 'ex-remove') {
             days[dayIndex].exercises.splice(exIndex, 1);
         } else if (action === 'ex-toggle') {
             days[dayIndex].exercises[exIndex].expanded = !days[dayIndex].exercises[exIndex].expanded;
+        } else if (action === 'set-add') {
+            // 直前のセットの値をコピーして追加 - ピラミッドセットは前のセット
+            // から少しずつ重量/回数を変えていくのが自然なので、0埋めより
+            // 続けて入力しやすい。
+            const sets = days[dayIndex].exercises[exIndex].sets;
+            sets.push({ ...sets[sets.length - 1] });
+        } else if (action === 'set-remove') {
+            const sets = days[dayIndex].exercises[exIndex].sets;
+            if (sets.length <= 1) return; // ボタン自体もdisabledだが念のため
+            sets.splice(setIndex, 1);
         }
         render();
     });
@@ -1184,12 +1240,12 @@ function readFormExercises(form, routineExercises) {
         const body = form.querySelector(`.training-exercise-block[data-ex="${exIndex}"] .training-exercise-body`);
         const opened = body && body.querySelector('.training-weight-input');
         const sets = opened
-            ? Array.from({ length: ex.target_sets }, (_, setIndex) => ({
+            ? ex.sets.map((_, setIndex) => ({
                 weight: Number(body.querySelector(`.training-weight-input[data-set="${setIndex}"]`).value) || 0,
                 reps: Number(body.querySelector(`.training-reps-input[data-set="${setIndex}"]`).value) || 0,
             }))
-            : Array.from({ length: ex.target_sets }, () => ({ weight: ex.default_weight, reps: ex.target_reps }));
-        return { name: ex.name, defaultWeight: ex.default_weight, sets };
+            : ex.sets.map((s) => ({ weight: s.weight, reps: s.reps }));
+        return { name: ex.name, sets };
     });
 }
 
@@ -1215,7 +1271,7 @@ async function loadRoutineManagement() {
         const routines = loadRoutines();
         const initialDays = routines.length > 0
             ? routines.map((r) => ({ label: r.label || '', exercises: r.exercises.map((ex) => ({ ...ex, expanded: false })) }))
-            : [{ label: '', exercises: [{ name: '', default_weight: 0, target_reps: 8, target_sets: 3, expanded: true }] }];
+            : [{ label: '', exercises: [{ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true }] }];
         initRoutineEditor(container, { initialDays, trainingState });
     } catch (e) {
         console.error('Routine management load error:', e);
@@ -1406,15 +1462,21 @@ async function loadTraining() {
                     alert_threshold_days: trainingState.alert_threshold_days,
                 });
 
-                // "以上" (at-or-above) the current default still counts as a
-                // new best worth remembering, per the spec.
-                const updatedExercises = routine.exercises.map((ex, i) => {
-                    const top = heaviestSet(exercises[i].sets);
-                    return top && top.weight >= ex.default_weight
-                        ? { ...ex, default_weight: top.weight }
-                        : ex;
-                });
-                const anyChanged = updatedExercises.some((ex, i) => ex.default_weight !== routine.exercises[i].default_weight);
+                // "以上" (at-or-above) the current planned weight still counts
+                // as a new best worth remembering, per the spec - now applied
+                // per set rather than to one shared default, since each set
+                // can have its own planned weight/reps.
+                const updatedExercises = routine.exercises.map((ex, i) => ({
+                    ...ex,
+                    sets: ex.sets.map((plannedSet, setIndex) => {
+                        const actual = exercises[i].sets[setIndex];
+                        return actual && actual.weight >= plannedSet.weight
+                            ? { weight: actual.weight, reps: plannedSet.reps }
+                            : plannedSet;
+                    }),
+                }));
+                const anyChanged = updatedExercises.some((ex, i) =>
+                    ex.sets.some((s, si) => s.weight !== routine.exercises[i].sets[si].weight));
                 if (anyChanged) {
                     updateRoutineDayExercises(day, updatedExercises);
                 }
