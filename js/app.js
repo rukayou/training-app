@@ -1637,33 +1637,58 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
     // 最終確定してrender()する。
     let dayDrag = null;
     const DAY_LIST_GAP_PX = 16; // .training-routine-editor-daysのgapと一致させる
+    const DAY_DRAG_THRESHOLD_PX = 8;
 
     editorEl.addEventListener('pointerdown', (e) => {
         const handle = e.target.closest('.training-routine-editor-day-drag-handle');
         if (!handle) return;
         const dayEl = handle.closest('.training-routine-editor-day');
         if (!dayEl) return;
-        const listEl = dayEl.parentElement;
-        // ドラッグ開始前に、他の行で入力中の値を全て取り込んでおく - 直後に
-        // days配列を直接いじるため、これを怠ると未反映の編集がrender()で
-        // 失われてしまう(既存のクリックハンドラと同じ理由)。
-        days = readEditorStateFromDom(editorEl, days);
-        const siblings = Array.from(listEl.children);
+        // ここではまだ並び替えを開始しない。ハンドルは行の右端にあり、
+        // 左スワイプ(削除)を始めたい位置とちょうど重なっているため、
+        // 即座に掴んでしまうとルーティーンをスワイプ削除できなくなる。
+        // 縦方向の動きだと確定してから初めて並び替えに入る。
         dayDrag = {
             dayEl,
-            listEl,
-            siblings,
-            index: siblings.indexOf(dayEl),
+            handle,
+            listEl: dayEl.parentElement,
+            siblings: null,
+            index: -1,
+            startX: e.clientX,
             startY: e.clientY,
+            dragging: false,
             pointerId: e.pointerId,
         };
-        dayEl.classList.add('is-dragging');
-        handle.setPointerCapture?.(e.pointerId);
-        e.preventDefault();
     });
+
+    function beginDayDrag(e) {
+        // 並び替えを確定した時点で、他の行で入力中の値を全て取り込んでおく -
+        // 直後にdays配列を直接いじるため、これを怠ると未反映の編集が
+        // render()で失われてしまう(既存のクリックハンドラと同じ理由)。
+        days = readEditorStateFromDom(editorEl, days);
+        dayDrag.siblings = Array.from(dayDrag.listEl.children);
+        dayDrag.index = dayDrag.siblings.indexOf(dayDrag.dayEl);
+        // 起点は指を置いた位置のまま(しきい値分を引かない)。こうすると
+        // 掴んだ瞬間から枠が指にぴたりと追従する - 引いてしまうと以降
+        // ずっとしきい値分だけ遅れてついてくることになる。
+        dayDrag.dragging = true;
+        dayDrag.dayEl.classList.add('is-dragging');
+        dayDrag.handle.setPointerCapture?.(dayDrag.pointerId);
+    }
 
     editorEl.addEventListener('pointermove', (e) => {
         if (!dayDrag || e.pointerId !== dayDrag.pointerId) return;
+        if (!dayDrag.dragging) {
+            const dx = e.clientX - dayDrag.startX;
+            const dy = e.clientY - dayDrag.startY;
+            // 横方向が勝ったらハンドル上の操作であってもスワイプに譲る。
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) >= SWIPE_DRAG_THRESHOLD_PX) {
+                dayDrag = null;
+                return;
+            }
+            if (Math.abs(dy) < DAY_DRAG_THRESHOLD_PX || Math.abs(dy) <= Math.abs(dx)) return;
+            beginDayDrag(e);
+        }
         e.preventDefault();
         dayDrag.dayEl.style.transform = `translateY(${e.clientY - dayDrag.startY}px)`;
 
@@ -1706,9 +1731,14 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
 
     function endDayDrag(e) {
         if (!dayDrag || (e && e.pointerId !== dayDrag.pointerId)) return;
-        dayDrag.dayEl.style.transform = '';
-        dayDrag.dayEl.classList.remove('is-dragging');
+        const current = dayDrag;
         dayDrag = null;
+        // 並び替えに入る前に離した(ハンドルを軽く叩いただけ、もしくは
+        // 横スワイプだった)場合は何も起きていないので、再描画もしない -
+        // ここでrender()してしまうとスワイプで開いた削除が閉じてしまう。
+        if (!current.dragging) return;
+        current.dayEl.style.transform = '';
+        current.dayEl.classList.remove('is-dragging');
         render();
         persistStructuralChange();
     }
