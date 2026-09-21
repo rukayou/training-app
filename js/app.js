@@ -819,6 +819,31 @@ function repsSelectHtml(value, attrs) {
     return `<select ${attrs}>${sorted.map((r) => `<option value="${r}" ${r === value ? 'selected' : ''}>${r}</option>`).join('')}</select>`;
 }
 
+const SET_COUNT_SELECT_MAX = 10;
+function setCountSelectHtml(value, attrs) {
+    const options = new Set(Array.from({ length: SET_COUNT_SELECT_MAX }, (_, i) => i + 1));
+    options.add(value);
+    const sorted = [...options].sort((a, b) => a - b);
+    return `<select ${attrs}>${sorted.map((c) => `<option value="${c}" ${c === value ? 'selected' : ''}>${c}</option>`).join('')}</select>`;
+}
+
+// Display-only transform - the saved shape (ex.sets, a flat array) never
+// changes. Consecutive sets with identical weight/reps collapse into one
+// group; editing a group's weight/reps splits it back apart on the next
+// render the moment its values diverge from its neighbor.
+function groupSets(sets) {
+    const groups = [];
+    for (const s of sets) {
+        const last = groups[groups.length - 1];
+        if (last && last.weight === s.weight && last.reps === s.reps) {
+            last.count += 1;
+        } else {
+            groups.push({ weight: s.weight, reps: s.reps, count: 1 });
+        }
+    }
+    return groups;
+}
+
 function exerciseSetRowsHtml(exercise, exIndex) {
     return exercise.sets.map((set, setIndex) => `
         <div class="training-set-row">
@@ -957,24 +982,29 @@ function routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded) {
 
 // Only rendered when expanded - mirrors .training-exercise-body, which stays
 // empty (no DOM at all) while collapsed rather than just visually hidden.
-function routineSetRowHtml(set, dayIndex, exIndex, setIndex, removable) {
+function routineSetRowHtml(group, dayIndex, exIndex, groupIndex, removable) {
     return `
-        <div class="training-routine-editor-set-row" data-set="${setIndex}">
-            <span class="training-routine-editor-set-label">${setIndex + 1}セット目</span>
-            ${weightSelectHtml(set.weight, `class="training-routine-editor-weight-select" data-set="${setIndex}"`)}
+        <div class="training-routine-editor-set-row" data-group="${groupIndex}">
+            ${setCountSelectHtml(group.count, `class="training-routine-editor-count-select" data-group="${groupIndex}"`)}
+            <span class="training-routine-editor-set-label">セット:</span>
+            ${weightSelectHtml(group.weight, `class="training-routine-editor-weight-select" data-group="${groupIndex}"`)}
             <span class="training-routine-editor-unit">kg ×</span>
-            ${repsSelectHtml(set.reps, `class="training-routine-editor-reps-select" data-set="${setIndex}"`)}
+            ${repsSelectHtml(group.reps, `class="training-routine-editor-reps-select" data-group="${groupIndex}"`)}
             <span class="training-routine-editor-unit">回</span>
-            <button type="button" class="action-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-set="${setIndex}" ${removable ? '' : 'disabled'}>削除</button>
+            <button type="button" class="action-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-group="${groupIndex}" ${removable ? '' : 'disabled'}>削除</button>
         </div>
     `;
 }
 
 // セットごとに重量・回数を分ける人(ピラミッドセット等)のため、"重量×回数×
 // セット数"という単一の組ではなく、セット単位の行のリストにした - セット数
-// という独立した概念は無くなり、行の数がそのままセット数になる。
+// という独立した概念は無くなり、行の数がそのままセット数になる。同じ重量・
+// 回数のセットはgroupSets()で1行にまとめて表示し(ワークアウト中の画面は
+// 元々セットごとの個別行のままなので混同しないよう注意)、値を変えた瞬間に
+// 自動的に別行へ分かれる。
 function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
-    const rows = ex.sets.map((set, i) => routineSetRowHtml(set, dayIndex, exIndex, i, ex.sets.length > 1)).join('');
+    const groups = groupSets(ex.sets);
+    const rows = groups.map((g, i) => routineSetRowHtml(g, dayIndex, exIndex, i, groups.length > 1)).join('');
     return `
         <div class="training-routine-editor-exercise-body">
             <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
@@ -1091,12 +1121,17 @@ function readEditorStateFromDom(editorEl, fallbackDays) {
             // reading from nodes that don't exist.
             const fallback = fallbackDays?.[dayIndex]?.exercises?.[exIndex];
             const nameInput = row.querySelector('.training-routine-editor-name-input');
-            const setRows = row.querySelectorAll('.training-routine-editor-set-row');
-            const sets = setRows.length > 0
-                ? Array.from(setRows).map((setRow) => ({
-                    weight: Number(setRow.querySelector('.training-routine-editor-weight-select').value),
-                    reps: Number(setRow.querySelector('.training-routine-editor-reps-select').value),
-                }))
+            const groupRows = row.querySelectorAll('.training-routine-editor-set-row');
+            // Each group row expands back into its `count` identical flat
+            // sets - the saved shape (ex.sets) is always the flat array,
+            // grouping is purely a rendering/editing convenience.
+            const sets = groupRows.length > 0
+                ? Array.from(groupRows).flatMap((groupRow) => {
+                    const weight = Number(groupRow.querySelector('.training-routine-editor-weight-select').value);
+                    const reps = Number(groupRow.querySelector('.training-routine-editor-reps-select').value);
+                    const count = Number(groupRow.querySelector('.training-routine-editor-count-select').value);
+                    return Array.from({ length: count }, () => ({ weight, reps }));
+                })
                 : (fallback?.sets ?? [{ weight: 0, reps: 8 }]);
             return {
                 name: nameInput ? nameInput.value : (fallback?.name ?? ''),
@@ -1187,7 +1222,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
 
         const dayIndex = Number(btn.dataset.day);
         const exIndex = Number(btn.dataset.ex);
-        const setIndex = Number(btn.dataset.set);
+        const groupIndex = Number(btn.dataset.group);
         // Capture whatever's currently typed into every row before mutating
         // the structure, so an add/remove/move elsewhere doesn't blow away
         // an in-progress edit in an unrelated row. Same reasoning for the
@@ -1197,7 +1232,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         if (restSelectEl) restSeconds = Number(restSelectEl.value);
 
         if (action === 'day-add') {
-            days.push({ label: '', exercises: [{ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true }] });
+            days.push({ label: '', exercises: [{ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true }] });
         } else if (action === 'day-remove') {
             if (days.length <= 1) {
                 alert('少なくとも1つはルーティーンが必要です。');
@@ -1209,21 +1244,29 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         } else if (action === 'day-move-down' && dayIndex < days.length - 1) {
             [days[dayIndex], days[dayIndex + 1]] = [days[dayIndex + 1], days[dayIndex]];
         } else if (action === 'ex-add') {
-            days[dayIndex].exercises.push({ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true });
+            days[dayIndex].exercises.push({ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true });
         } else if (action === 'ex-remove') {
             days[dayIndex].exercises.splice(exIndex, 1);
         } else if (action === 'ex-toggle') {
             days[dayIndex].exercises[exIndex].expanded = !days[dayIndex].exercises[exIndex].expanded;
         } else if (action === 'set-add') {
-            // 直前のセットの値をコピーして追加 - ピラミッドセットは前のセット
-            // から少しずつ重量/回数を変えていくのが自然なので、0埋めより
-            // 続けて入力しやすい。
+            // 直前のセットとほぼ同じ値(重量だけ-1kg)で追加する - 完全に
+            // 同じ値だと表示上すぐ直前のグループへ統合されてしまい、
+            // ピラミッドセットの新しい段として独立編集できなくなるため。
+            // 単に同じセットを増やしたいだけなら、追加後に重量を1つ戻せば
+            // 元のグループへまとまる。
             const sets = days[dayIndex].exercises[exIndex].sets;
-            sets.push({ ...sets[sets.length - 1] });
+            const prev = sets[sets.length - 1];
+            sets.push({ weight: Math.max(0, prev.weight - 1), reps: prev.reps });
         } else if (action === 'set-remove') {
-            const sets = days[dayIndex].exercises[exIndex].sets;
-            if (sets.length <= 1) return; // ボタン自体もdisabledだが念のため
-            sets.splice(setIndex, 1);
+            // グループ単位の削除 - そのグループが占めるフラット配列の区間
+            // (それより前のグループのcount合計〜自身のcount分)を丸ごと消す。
+            const ex = days[dayIndex].exercises[exIndex];
+            const groups = groupSets(ex.sets);
+            if (groups.length <= 1) return; // ボタン自体もdisabledだが念のため
+            let start = 0;
+            for (let i = 0; i < groupIndex; i++) start += groups[i].count;
+            ex.sets.splice(start, groups[groupIndex].count);
         }
         render();
     });
@@ -1264,14 +1307,26 @@ function drawChart(container, logs, exerciseName) {
 // runs eagerly on boot so the tab is already rendered the instant someone
 // clicks it, and again after every successful save.
 async function loadRoutineManagement() {
-    const container = document.getElementById('routineManagementEditor');
+    let container = document.getElementById('routineManagementEditor');
     if (!container) return;
+    // This runs many times over the page's life (boot, and again after
+    // every successful save) but initRoutineEditor() attaches its click
+    // listener directly to this persistent container rather than to a
+    // freshly-built child - a second call would otherwise stack a second
+    // listener on top of the first (and a third, ...), so every click
+    // fires all of them at once and e.g. ex-toggle's flip ends up
+    // cancelling itself out. Cloning-and-replacing drops any listener a
+    // previous call attached, while keeping the same id for the next
+    // lookup.
+    const freshContainer = container.cloneNode(false);
+    container.replaceWith(freshContainer);
+    container = freshContainer;
     try {
         const trainingState = loadState();
         const routines = loadRoutines();
         const initialDays = routines.length > 0
             ? routines.map((r) => ({ label: r.label || '', exercises: r.exercises.map((ex) => ({ ...ex, expanded: false })) }))
-            : [{ label: '', exercises: [{ name: '', sets: [{ weight: 0, reps: 8 }], expanded: true }] }];
+            : [{ label: '', exercises: [{ name: '', sets: Array.from({ length: 3 }, () => ({ weight: 0, reps: 8 })), expanded: true }] }];
         initRoutineEditor(container, { initialDays, trainingState });
     } catch (e) {
         console.error('Routine management load error:', e);

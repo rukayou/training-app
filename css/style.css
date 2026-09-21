@@ -758,12 +758,11 @@ button.btn-primary:active {
 .training-routine-editor-set-label {
     flex-shrink: 0;
     color: var(--text-muted);
-    width: 62px;
 }
 
+.training-routine-editor-count-select,
 .training-routine-editor-weight-select,
 .training-routine-editor-reps-select {
-    width: 60px;
     padding: 8px 6px;
     border: 1px solid var(--line);
     background: var(--surface-soft);
@@ -771,6 +770,15 @@ button.btn-primary:active {
     border-radius: var(--radius-sm);
     font-family: inherit;
     box-sizing: border-box;
+}
+
+.training-routine-editor-count-select {
+    width: 48px;
+}
+
+.training-routine-editor-weight-select,
+.training-routine-editor-reps-select {
+    width: 60px;
 }
 
 .training-routine-editor-remove-set {
