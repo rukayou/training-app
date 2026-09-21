@@ -801,9 +801,17 @@ button.btn-primary:active {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px;
+    /* 横方向のpaddingを付けると、種目名入力欄とセット行(.training-routine-
+       editor-set-row-content)が確定済み種目の本文より狭くなり、「+」だけ
+       折り返されてしまう(実機で発覚) - 横方向は0にして幅を完全に揃える。 */
+    padding: 10px 0;
     border: 1px dashed var(--line);
     border-radius: var(--radius-sm);
+}
+
+.training-routine-editor-exercise-draft > .training-routine-editor-name-input {
+    margin: 0 10px;
+    width: auto;
 }
 
 .training-routine-editor-set-list {
