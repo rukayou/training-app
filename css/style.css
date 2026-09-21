@@ -358,10 +358,19 @@ body {
     background: color-mix(in srgb, currentColor 18%, transparent);
 }
 
+/* 枠の位置ごとに色を固定する。ワークアウト前後で中身は入れ替わるが
+   (予定ボリューム↔前回比、何日ぶり↔自己ベスト)、同じ枠は同じ色なので
+   切り替わっても見る場所が動かない。 */
 .training-metric[data-metric-key="duration"] .training-metric-chip { color: var(--metric-duration); }
-.training-metric[data-metric-key="volume"] .training-metric-chip { color: var(--metric-volume); }
-.training-metric[data-metric-key="exercises"] .training-metric-chip { color: var(--metric-exercises); }
-.training-metric[data-metric-key="sets"] .training-metric-chip { color: var(--metric-sets); }
+.training-metric[data-metric-key="plan"] .training-metric-chip,
+.training-metric[data-metric-key="delta"] .training-metric-chip { color: var(--metric-volume); }
+.training-metric[data-metric-key="interval"] .training-metric-chip,
+.training-metric[data-metric-key="pb"] .training-metric-chip { color: var(--metric-exercises); }
+.training-metric[data-metric-key="week"] .training-metric-chip { color: var(--metric-sets); }
+
+/* 伸びていれば緑、落ちていれば控えめに */
+.training-metric-value.is-up { color: var(--success); }
+.training-metric-value.is-down { color: var(--text-muted); }
 
 .training-metric-value {
     font-size: var(--text-title);

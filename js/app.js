@@ -843,6 +843,40 @@ function estimated1RM(sets) {
     return top.weight * (1 + top.reps / 30);
 }
 
+// --- メトリクス用の集計 ---------------------------------------------------
+// どれもログ(training_logs)から導けるものだけで組み立てている。ログには
+// 「どのメニュー(day)を・いつ・どの種目を何kg何回」が残っているので、
+// 前回比や自己ベストの判定に必要な情報は全部そろっている。
+
+// 同じメニューの、今日より前の最新の記録。前回比と「何日ぶり」の基準になる。
+function previousLogForDay(logs, day, todayStr) {
+    return logs.filter((l) => l.day === day && l.date < todayStr).pop() || null;
+}
+
+// 今日、過去の最高重量を上回った種目の数。その種目の履歴が無い場合は
+// 数えない - 初回は必ず「自己ベスト」になってしまい数字が意味を持たないため。
+function personalBestCount(logs, todayLog) {
+    if (!todayLog) return null;
+    const bestBefore = new Map();
+    for (const log of logs.filter((l) => l.date < todayLog.date)) {
+        for (const ex of log.exercises) {
+            const max = ex.sets.reduce((m, s) => Math.max(m, s.weight), 0);
+            bestBefore.set(ex.name, Math.max(bestBefore.get(ex.name) ?? 0, max));
+        }
+    }
+    return todayLog.exercises.reduce((count, ex) => {
+        const prev = bestBefore.get(ex.name);
+        if (prev === undefined) return count;
+        const max = ex.sets.reduce((m, s) => Math.max(m, s.weight), 0);
+        return max > prev ? count + 1 : count;
+    }, 0);
+}
+
+function sessionsThisWeek(logs, todayStr) {
+    const week = new Set(jstWeekDates(todayStr));
+    return logs.filter((l) => week.has(l.date)).length;
+}
+
 function sessionVolume(exercises) {
     return exercises.reduce(
         (sum, ex) => sum + ex.sets.reduce((s, set) => s + set.weight * set.reps, 0),
@@ -946,29 +980,68 @@ function exerciseBlockHtml(ex, i) {
     `;
 }
 
-// The reference design's カロリー slot has no equivalent data source here
-// (no nutrition tracking), so it's replaced with 種目数/セット数 - both are
-// real numbers this app already has. 運動部位 isn't repeated either since
-// the title above already shows the routine's label.
-function trainingMetricsRowHtml(todayLog) {
-    const totalSets = todayLog ? todayLog.exercises.reduce((sum, ex) => sum + ex.sets.length, 0) : null;
-    // icon/色は表示専用の付加情報 - 値の算出自体は今までどおり。数値と単位を
-    // 分けて持つのは、数値だけを大きく・単位を小さく組んで桁を揃えるため
-    // (カウントアップ中に見た目が揺れないよう、CSS側で tabular-nums 指定)。
-    const metrics = [
-        { key: 'duration', label: 'トレーニング時間', icon: 'clock', num: todayLog?.duration_minutes ?? null, unit: '分' },
-        { key: 'volume', label: '総ボリューム', icon: 'flame', num: todayLog ? todayLog.volume : null, unit: 'kg' },
-        { key: 'exercises', label: '種目数', icon: 'layers', num: todayLog ? todayLog.exercises.length : null, unit: '種目' },
-        { key: 'sets', label: 'セット数', icon: 'repeat', num: todayLog ? totalSets : null, unit: 'セット' },
-    ];
+// ワークアウトの前後で中身が入れ替わる。前は「これから何をやるか」、後は
+// 「今日どれだけ伸びたか」。種目数/セット数のような、見ても行動が変わらない
+// 数字はやめた(ルーティーンを見れば分かる情報なので、ここに置く価値が薄い)。
+//
+//            ワークアウト前            ワークアウト後
+//  1枠目     トレーニング時間(計測中)   トレーニング時間
+//  2枠目     今日の予定ボリューム       前回比
+//  3枠目     このメニューは何日ぶりか   自己ベスト更新
+//  4枠目     今週のトレーニング回数     今週のトレーニング回数
+//
+// 数値と単位を分けて持つのは、数値だけを大きく・単位を小さく組んで桁を
+// 揃えるため(カウントアップ中に揺れないよう、CSS側で tabular-nums 指定)。
+function trainingMetricsRowHtml({ todayLog, logs, routine, day, todayStr }) {
+    const jp = (n) => n.toLocaleString('ja-JP');
+    const prevLog = previousLogForDay(logs, day, todayStr);
+
+    const duration = {
+        key: 'duration', label: 'トレーニング時間', icon: 'clock',
+        text: todayLog?.duration_minutes ? jp(todayLog.duration_minutes) : null, unit: '分',
+    };
+    const week = {
+        key: 'week', label: '今週のトレーニング', icon: 'calendar',
+        text: jp(sessionsThisWeek(logs, todayStr)), unit: '回',
+    };
+
+    let volumeSlot;
+    let progressSlot;
+    if (todayLog) {
+        const delta = prevLog ? todayLog.volume - prevLog.volume : null;
+        volumeSlot = {
+            key: 'delta', label: '前回のこのメニュー比', icon: 'flame',
+            text: delta === null ? '初回' : `${delta >= 0 ? '+' : '−'}${jp(Math.abs(delta))}`,
+            unit: delta === null ? '' : 'kg',
+            tone: delta === null ? null : (delta > 0 ? 'up' : delta < 0 ? 'down' : null),
+        };
+        const pb = personalBestCount(logs, todayLog);
+        progressSlot = {
+            key: 'pb', label: '自己ベスト更新', icon: 'flag',
+            text: jp(pb), unit: '種目', tone: pb > 0 ? 'up' : null,
+        };
+    } else {
+        volumeSlot = {
+            key: 'plan', label: '今日の予定ボリューム', icon: 'flame',
+            text: jp(sessionVolume(routine.exercises)), unit: 'kg',
+        };
+        const interval = prevLog ? jstDaysBetween(prevLog.date, todayStr) : null;
+        progressSlot = {
+            key: 'interval', label: 'このメニューは', icon: 'repeat',
+            text: interval === null ? '初回' : jp(interval),
+            unit: interval === null ? '' : '日ぶり',
+        };
+    }
+
+    const metrics = [duration, volumeSlot, progressSlot, week];
     return `
         <div class="training-metrics-row">
             ${metrics.map((m) => `
                 <div class="training-metric" data-metric-key="${m.key}">
                     <span class="training-metric-chip">${icon(m.icon)}</span>
-                    <span class="training-metric-value" data-metric="${m.key}">${m.num === null
+                    <span class="training-metric-value${m.tone ? ` is-${m.tone}` : ''}" data-metric="${m.key}">${m.text === null
                         ? '<span class="training-metric-empty">-</span>'
-                        : `${escapeHtml(String(m.num))}<span class="training-metric-unit">${escapeHtml(m.unit)}</span>`}</span>
+                        : `${escapeHtml(m.text)}${m.unit ? `<span class="training-metric-unit">${escapeHtml(m.unit)}</span>` : ''}`}</span>
                     <span class="training-metric-label">${escapeHtml(m.label)}</span>
                 </div>
             `).join('')}
@@ -976,7 +1049,7 @@ function trainingMetricsRowHtml(todayLog) {
     `;
 }
 
-function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog }) {
+function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog, logs, routine, day, todayStr }) {
     const countHtml = isOverdue
         ? `${icon('flag')}<span>${overdueDays}日以上お休み中</span>`
         : `${icon('play')}<span>ワークアウト開始</span>`;
@@ -992,7 +1065,7 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
             <div class="training-header-top">
                 <span class="training-title">${escapeHtml(label)} ・ 通算${pendingSessionNumber}日目</span>
             </div>
-            ${trainingMetricsRowHtml(todayLog)}
+            ${trainingMetricsRowHtml({ todayLog, logs, routine, day, todayStr })}
             <div class="training-header-actions">
                 <button type="button" class="training-start-toggle training-status-pill ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
                     ${countHtml} <span class="training-chevron">${icon('chevronDown')}</span>
@@ -1628,7 +1701,10 @@ function drawChart(container, logs, exerciseName) {
             const match = log.exercises.find((e) => e.name === exerciseName);
             return match ? { date: log.date, value: match.estimated1RM } : null;
         })
-        .filter(Boolean)
+        // estimated1RM を持たない記録(この項目を書き出すより前の古いログ等)は
+        // 描かずに飛ばす。1件混ざっただけで描画が落ち、カード全体が
+        // 「読み込めませんでした」になってしまうため。
+        .filter((p) => p && Number.isFinite(p.value))
         .slice(-12);
     container.innerHTML = buildTrendSvgMarkup(points);
 }
@@ -1711,6 +1787,7 @@ async function loadTraining() {
         container.innerHTML = buildCardHtml({
             label: routine.label || `ルーティーン${day}`, pendingSessionNumber, isOverdue, overdueDays,
             exercises: routine.exercises, exerciseNames, chartExercise, todayLog,
+            logs, routine, day, todayStr,
         });
         container.classList.remove('hidden');
 
