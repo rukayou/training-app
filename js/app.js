@@ -2071,8 +2071,9 @@ function initTabs() {
 
 // --- Boot ---
 function registerServiceWorker() {
-    // Needed only so the rest-timer can call
-    // ServiceWorkerRegistration.showNotification() - no push, no caching.
+    // レストタイマーが ServiceWorkerRegistration.showNotification() を
+    // 呼べるようにするためと、起動のたびに最新版を取りに行かせるため
+    // (詳細は sw.js のコメント)。
     // Best-effort: silently no-ops over file:// (no secure context) or in
     // older browsers without support - sound/vibration/the in-page alarm
     // still work regardless.
@@ -2080,6 +2081,85 @@ function registerServiceWorker() {
     navigator.serviceWorker.register('sw.js').catch((e) => {
         console.error('Service worker registration failed:', e);
     });
+}
+
+// ホーム画面に追加して開いた場合(スタンドアロン表示)はアドレスバーが
+// 無いため、ブラウザの再読み込みボタンに相当するものが画面上に無い。
+// 新機能やバグ修正を配信しても手元で更新できないと困るので、フッターに
+// 明示的な更新手段を置く。キャッシュを消してから読み込み直すので、
+// 「何度押しても古いまま」にはならない。
+function initAppReload() {
+    const btn = document.getElementById('appReloadBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '更新中…';
+        try {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.getRegistration();
+                if (registration) {
+                    await registration.update();
+                    // 新しいワーカーが待機中なら、次回起動を待たずに交代させる。
+                    if (registration.waiting) registration.waiting.postMessage('skip-waiting');
+                }
+            }
+            if (window.caches) {
+                const names = await caches.keys();
+                await Promise.all(names.map((name) => caches.delete(name)));
+            }
+        } catch (e) {
+            // 掃除に失敗しても、読み込み直すところまでは必ずやる。
+            console.error('更新の準備に失敗しました:', e);
+        }
+        location.reload();
+    });
+}
+
+// アプリスイッチャーから戻っただけではページが読み込み直されないことが
+// あるので、前面に戻ったタイミングで更新の有無だけ確認しておく。実際に
+// 差し替わるのは利用者が「最新の状態に更新」を押した時なので、
+// トレーニング中に勝手に画面が作り直されることはない。
+function initAppUpdateWatch() {
+    if (!('serviceWorker' in navigator)) return;
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        navigator.serviceWorker.getRegistration()
+            .then((registration) => registration?.update())
+            .catch(() => {});
+    });
+
+    let hasController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // 初回登録時のclients.claim()でも発火するため、その1回は無視する。
+        if (!hasController) {
+            hasController = true;
+            return;
+        }
+        showQuickToast('新しいバージョンがあります。下の「最新の状態に更新」を押してください');
+    });
+}
+
+// フッターに配信中ファイルの更新日時を出す。手で書き換えるバージョン番号
+// と違って実際に配信されている js/app.js の Last-Modified なので、
+// 「更新が届いているかどうか」の確認にそのまま使える。
+async function renderAppVersionLine() {
+    const el = document.getElementById('appVersionLine');
+    if (!el) return;
+    try {
+        const res = await fetch('js/app.js', { method: 'HEAD', cache: 'no-cache' });
+        const lastModified = res.headers.get('Last-Modified');
+        if (!lastModified) return;
+        const date = new Date(lastModified);
+        if (Number.isNaN(date.getTime())) return;
+        el.textContent = `最終更新 ${new Intl.DateTimeFormat('ja-JP', {
+            timeZone: 'Asia/Tokyo',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit',
+        }).format(date)}`;
+    } catch (e) {
+        // file:// で開いた場合やオフライン。表示が出ないだけで実害は無い。
+    }
 }
 
 function unlockAudioOnFirstTap() {
@@ -2111,6 +2191,9 @@ function boot() {
     loadTraining();
     loadRoutineManagement();
     registerServiceWorker();
+    initAppReload();
+    initAppUpdateWatch();
+    renderAppVersionLine();
     unlockAudioOnFirstTap();
     window.__appBooted = true;
 }

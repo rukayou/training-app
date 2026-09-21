@@ -181,6 +181,40 @@ body {
     margin: 0;
 }
 
+/* ホーム画面から開くとアドレスバーが無いので、これが唯一の
+   「再読み込み」になる。目立たせすぎず、押し間違えない大きさ(44px)。 */
+.app-reload-btn {
+    margin-top: var(--space-3);
+    min-height: 44px;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.app-reload-btn:active {
+    transform: scale(0.97);
+    background: var(--surface-3);
+}
+
+.app-reload-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.app-version-line {
+    margin-top: var(--space-2);
+    font-size: var(--text-micro);
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ===== タブ(セグメンテッドコントロール風) ===== */
 
 .app-tabs {
