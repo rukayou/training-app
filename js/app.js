@@ -803,7 +803,7 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
     return `
         <div class="training-routine-editor-exercise-row" data-day="${dayIndex}" data-ex="${exIndex}" data-expanded="${expanded}">
             <div class="training-routine-editor-exercise-header">
-                <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim() || '(名称未設定)')}</span>
+                <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim())}</span>
                 <div class="training-routine-editor-exercise-actions">
                     ${routineExerciseToggleBtnHtml(dayIndex, exIndex, expanded)}
                     <button type="button" class="action-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
