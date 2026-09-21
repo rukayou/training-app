@@ -1453,9 +1453,31 @@ function initSwipeToReveal(container) {
     }, true);
 }
 
+// 行が増える・減る・動く操作。これらは画面から即座に消えたり増えたりする
+// ぶん「保存したつもり」になりやすく、保存ボタンを押さずに離れると元に
+// 戻ってしまうのが分かりにくかったため、その場で永続化する。名前・重量・
+// 回数といった値の編集は従来どおり「ルーティーンを保存する」で確定する。
+const STRUCTURAL_ACTIONS = new Set([
+    'day-add', 'day-remove', 'ex-add', 'ex-remove', 'set-add', 'set-remove',
+]);
+
 function initRoutineEditor(editorEl, { initialDays, trainingState }) {
     let days = JSON.parse(JSON.stringify(initialDays));
     let restSeconds = trainingState.rest_seconds;
+
+    // 自動保存では検証(種目名が空など)をしない - 入力の途中で警告を出すのは
+    // 邪魔なうえ、検証で弾いて保存しないと「消したのに戻る」が再発するため。
+    // 明示的な保存ボタン側の検証はそのまま残してある。
+    // エディタ自身は既に描画済みなので再構築はせず、反対のタブ(今日の
+    // トレーニング)の表示だけ最新に合わせる。
+    function persistStructuralChange() {
+        try {
+            saveRoutines(days);
+            loadTraining();
+        } catch (e) {
+            console.error('Routine auto-save error:', e);
+        }
+    }
 
     function render() {
         editorEl.innerHTML = routineEditorHtml(days, restSeconds);
@@ -1585,6 +1607,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
             target.sets.splice(start, groups[groupIndex].count);
         }
         render();
+        if (STRUCTURAL_ACTIONS.has(action)) persistStructuralChange();
     });
 
     initSwipeToReveal(editorEl);
@@ -1670,6 +1693,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
         dayDrag.dayEl.classList.remove('is-dragging');
         dayDrag = null;
         render();
+        persistStructuralChange();
     }
     editorEl.addEventListener('pointerup', endDayDrag);
     editorEl.addEventListener('pointercancel', endDayDrag);
