@@ -1261,16 +1261,8 @@ async function loadTraining() {
             toggleBtn.setAttribute('aria-expanded', String(nowExpanded));
             list.classList.toggle('hidden', expanded);
             container.classList.toggle('expanded', nowExpanded);
-
-            // 折りたたみ→展開への遷移が「トレーニング開始」に相当する。
-            // 展開→折りたたみ時は何もしない(メトリクス行はヘッダー内にあり
-            // .training-listの折りたたみと無関係に表示され続けるため、
-            // タイマーは裏で動き続けて問題ない)。
-            if (nowExpanded && !loadActiveSession()) {
-                startActiveSession();
-                if (saveBtn) saveBtn.textContent = '終了';
-                startSessionTimer(Date.now(), durationEl);
-            }
+            // カードを開くだけではセッションは始まらない - 実際に種目の
+            // 「開始」を押した時点が「トレーニング開始」(下のex-start参照)。
         });
 
         const chartWrap = container.querySelector('.training-chart-wrap');
@@ -1320,6 +1312,15 @@ async function loadTraining() {
 
             if (action === 'ex-start') {
                 expandExerciseBlock(block, exIndex, routine.exercises[exIndex]);
+                // 「トレーニング開始」は種目の開始ボタンを押した瞬間 - カードを
+                // 開いただけ(トグル)ではまだ始まらない。2つ目以降の種目を
+                // 開始してもセッションは1つのまま(既存セッションがあれば
+                // 何もしない)。
+                if (!loadActiveSession()) {
+                    startActiveSession();
+                    if (saveBtn) saveBtn.textContent = '終了';
+                    startSessionTimer(Date.now(), durationEl);
+                }
             } else if (action === 'ex-collapse') {
                 stopRestTimer(exIndex);
                 clearPersistedRestTimer(exIndex);
