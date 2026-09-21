@@ -781,17 +781,12 @@ function exerciseSetRowsHtml(exercise, exIndex) {
 }
 
 // Shared between the initial render and "閉じる" (collapse-back-to-pending) -
-// both need to produce the same starting pair of buttons. The label reflects
-// live session state each time this is called (not a value threaded in from
-// buildCardHtml), so it stays correct across the "ex-collapse" re-render
-// too: only the very first 開始 of the day - the one that actually starts
-// the session timer - reads "ワークアウト開始"; once a session is already
-// running, every other 開始 (this exercise re-opened, or a different one)
-// is just plain "開始".
+// both need to produce the same starting pair of buttons. "ワークアウト
+// 開始" belongs only to the card-level toggle (see buildCardHtml) - each
+// individual exercise's own start button is just plain "開始".
 function exerciseActionsHtml(i) {
-    const startLabel = loadActiveSession() ? '開始' : 'ワークアウト開始';
     return `
-        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">${startLabel}</button>
+        <button type="button" class="action-btn training-start-btn" data-action="ex-start" data-ex="${i}">開始</button>
         <button type="button" class="action-btn training-complete-btn" data-action="ex-complete" data-ex="${i}">完了</button>
     `;
 }
@@ -840,7 +835,7 @@ function trainingMetricsRowHtml(todayLog) {
 function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog }) {
     const countHtml = isOverdue
         ? `⚠️ ${overdueDays}日以上お休み中`
-        : '開始';
+        : 'ワークアウト開始';
 
     const exerciseBlocks = exercises.map((ex, i) => exerciseBlockHtml(ex, i)).join('');
 
@@ -1327,13 +1322,6 @@ async function loadTraining() {
                     startActiveSession();
                     if (saveBtn) saveBtn.textContent = '終了';
                     startSessionTimer(Date.now(), durationEl);
-                    // 他のまだ未着手の種目は、初回レンダー時点ではセッション
-                    // 未開始だったため「ワークアウト開始」のまま残っている -
-                    // 今まさにセッションが始まったので、それらは即座に通常の
-                    // 「開始」表示に切り替える(再レンダーを待たない)。
-                    form.querySelectorAll('.training-start-btn[data-action="ex-start"]').forEach((btn) => {
-                        btn.textContent = '開始';
-                    });
                 }
             } else if (action === 'ex-collapse') {
                 stopRestTimer(exIndex);
