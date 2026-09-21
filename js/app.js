@@ -1046,12 +1046,16 @@ function routineDayBlockHtml(day, dayIndex, days) {
     const rows = day.exercises.map((ex, i) => routineExerciseRowHtml(ex, dayIndex, i)).join('');
     return `
         <div class="training-routine-editor-day" data-day="${dayIndex}">
-            <div class="training-routine-editor-day-header">
-                <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
-                <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
-                <button type="button" class="action-btn training-routine-editor-day-move-up" data-action="day-move-up" data-day="${dayIndex}" ${dayIndex === 0 ? 'disabled' : ''}>↑</button>
-                <button type="button" class="action-btn training-routine-editor-day-move-down" data-action="day-move-down" data-day="${dayIndex}" ${dayIndex === days.length - 1 ? 'disabled' : ''}>↓</button>
-                <button type="button" class="action-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>このルーティーンを削除</button>
+            <div class="training-routine-editor-day-header swipe-row">
+                <div class="swipe-row-actions">
+                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>削除</button>
+                </div>
+                <div class="swipe-row-content training-routine-editor-day-header-content">
+                    <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
+                    <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
+                    <button type="button" class="action-btn training-routine-editor-day-move-up" data-action="day-move-up" data-day="${dayIndex}" ${dayIndex === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="action-btn training-routine-editor-day-move-down" data-action="day-move-down" data-day="${dayIndex}" ${dayIndex === days.length - 1 ? 'disabled' : ''}>↓</button>
+                </div>
             </div>
             <div class="training-routine-editor-exercise-list">${rows}</div>
             <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>

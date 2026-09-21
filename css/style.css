@@ -681,7 +681,7 @@ button.btn-primary:active {
     gap: 10px;
 }
 
-.training-routine-editor-day-header {
+.training-routine-editor-day-header-content {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -848,8 +848,7 @@ button.btn-primary:active {
 }
 
 .training-routine-editor-day-move-up:disabled,
-.training-routine-editor-day-move-down:disabled,
-.training-routine-editor-remove-day:disabled {
+.training-routine-editor-day-move-down:disabled {
     opacity: 0.35;
     cursor: default;
 }
