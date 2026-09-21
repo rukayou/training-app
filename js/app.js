@@ -1212,20 +1212,22 @@ function routineExerciseDraftHtml(draft, dayIndex) {
 function routineDayBlockHtml(day, dayIndex, days) {
     const rows = day.exercises.map((ex, i) => routineExerciseRowHtml(ex, dayIndex, i)).join('');
     return `
-        <div class="training-routine-editor-day" data-day="${dayIndex}">
-            <div class="training-routine-editor-day-header swipe-row">
-                <div class="swipe-row-actions">
-                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>${icon('trash')}<span>削除</span></button>
-                </div>
-                <div class="swipe-row-content training-routine-editor-day-header-content">
-                    <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
-                    <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
-                    <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">${icon('grip')}</button>
-                </div>
+        <div class="training-routine-editor-day swipe-row" data-day="${dayIndex}">
+            <div class="swipe-row-actions">
+                <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>${icon('trash')}<span>削除</span></button>
             </div>
-            <div class="training-routine-editor-exercise-list">${rows}</div>
-            ${routineExerciseDraftHtml(day.draft, dayIndex)}
-            <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>
+            <div class="swipe-row-content training-routine-editor-day-content">
+                <div class="training-routine-editor-day-header">
+                    <div class="training-routine-editor-day-header-content">
+                        <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
+                        <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
+                        <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">${icon('grip')}</button>
+                    </div>
+                </div>
+                <div class="training-routine-editor-exercise-list">${rows}</div>
+                ${routineExerciseDraftHtml(day.draft, dayIndex)}
+                <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>
+            </div>
         </div>
     `;
 }
@@ -1382,10 +1384,15 @@ function initSwipeToReveal(container) {
         // - 新しい操作の開始時点で必ずリセットし、あくまで「直前の操作の
         // 直後に来たclick」だけを対象にする。
         justDragged = false;
-        if (openRowEl && !openRowEl.contains(e.target)) {
+        // スワイプ行は入れ子になる(ルーティーン枠の中に種目行・セット行)。
+        // closest()は常に一番内側の行を返すので、「開いている行そのもの
+        // (露出した削除ボタンを含む)以外に触れたら閉じる」で統一する。
+        // contains()で判定すると、ルーティーン枠が開いている状態で中の
+        // セット行に触れても閉じない。
+        const rowEl = e.target.closest('.swipe-row');
+        if (openRowEl && rowEl !== openRowEl) {
             closeRow(openRowEl);
         }
-        const rowEl = e.target.closest('.swipe-row');
         if (!rowEl) return;
         const contentEl = rowEl.querySelector(':scope > .swipe-row-content');
         const actionsEl = rowEl.querySelector(':scope > .swipe-row-actions');
