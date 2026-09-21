@@ -1015,12 +1015,14 @@ function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
     const rows = groups.map((g, i) => routineSetRowHtml(g, dayIndex, exIndex, i, groups.length > 1)).join('');
     return `
         <div class="training-routine-editor-exercise-body">
-            <input type="text" class="training-routine-editor-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
             <div class="training-routine-editor-set-list">${rows}</div>
         </div>
     `;
 }
 
+// 種目名は(折りたたみ中かどうかに関わらず)ヘッダーの入力欄1箇所だけで
+// 表示・編集する - 以前は折りたたみ中はヘッダーに読み取り専用のラベル、
+// 展開中は本文にも同じ名前の入力欄が出て二重表示になっていたのを解消。
 function routineExerciseRowHtml(ex, dayIndex, exIndex) {
     const expanded = !!ex.expanded;
     return `
@@ -1030,7 +1032,7 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
                     <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
                 </div>
                 <div class="swipe-row-content training-routine-editor-exercise-header-content">
-                    <span class="training-routine-editor-exercise-name">${escapeHtml(ex.name.trim())}</span>
+                    <input type="text" class="training-routine-editor-name-input training-routine-editor-exercise-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
                     ${expanded ? '' : `<div class="training-routine-editor-exercise-actions">${routineExerciseToggleBtnHtml(dayIndex, exIndex)}</div>`}
                 </div>
             </div>
@@ -1074,8 +1076,7 @@ function routineDayBlockHtml(day, dayIndex, days) {
                 <div class="swipe-row-content training-routine-editor-day-header-content">
                     <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
                     <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
-                    <button type="button" class="action-btn training-routine-editor-day-move-up" data-action="day-move-up" data-day="${dayIndex}" ${dayIndex === 0 ? 'disabled' : ''}>↑</button>
-                    <button type="button" class="action-btn training-routine-editor-day-move-down" data-action="day-move-down" data-day="${dayIndex}" ${dayIndex === days.length - 1 ? 'disabled' : ''}>↓</button>
+                    <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">↕</button>
                 </div>
             </div>
             <div class="training-routine-editor-exercise-list">${rows}</div>
@@ -1407,10 +1408,6 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
                 return;
             }
             days.splice(dayIndex, 1);
-        } else if (action === 'day-move-up' && dayIndex > 0) {
-            [days[dayIndex - 1], days[dayIndex]] = [days[dayIndex], days[dayIndex - 1]];
-        } else if (action === 'day-move-down' && dayIndex < days.length - 1) {
-            [days[dayIndex], days[dayIndex + 1]] = [days[dayIndex + 1], days[dayIndex]];
         } else if (action === 'ex-add') {
             // 常時表示の下書き(draft)をそのままリストへ確定登録し(折りた
             // たみ済みの通常の種目として表示)、下書き欄自体は空の状態に
@@ -1444,6 +1441,91 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
     });
 
     initSwipeToReveal(editorEl);
+
+    // ルーティーンの並び替え: ↑↓ボタンではなく、ドラッグハンドル(↕)を
+    // 掴んで上下にドラッグする方式。隣のルーティーン枠の中央を超えた瞬間に
+    // DOM上のノードをinsertBeforeで直接入れ替え、days配列も同じタイミング
+    // で同期させる(枠自体がポインターに追従してその場でグッと動く見た目
+    // になる - CSSトランジションは意図的に付けていない)。離した時点で
+    // 最終確定してrender()する。
+    let dayDrag = null;
+    const DAY_LIST_GAP_PX = 16; // .training-routine-editor-daysのgapと一致させる
+
+    editorEl.addEventListener('pointerdown', (e) => {
+        const handle = e.target.closest('.training-routine-editor-day-drag-handle');
+        if (!handle) return;
+        const dayEl = handle.closest('.training-routine-editor-day');
+        if (!dayEl) return;
+        const listEl = dayEl.parentElement;
+        // ドラッグ開始前に、他の行で入力中の値を全て取り込んでおく - 直後に
+        // days配列を直接いじるため、これを怠ると未反映の編集がrender()で
+        // 失われてしまう(既存のクリックハンドラと同じ理由)。
+        days = readEditorStateFromDom(editorEl, days);
+        const siblings = Array.from(listEl.children);
+        dayDrag = {
+            dayEl,
+            listEl,
+            siblings,
+            index: siblings.indexOf(dayEl),
+            startY: e.clientY,
+            pointerId: e.pointerId,
+        };
+        dayEl.classList.add('is-dragging');
+        handle.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+    });
+
+    editorEl.addEventListener('pointermove', (e) => {
+        if (!dayDrag || e.pointerId !== dayDrag.pointerId) return;
+        e.preventDefault();
+        dayDrag.dayEl.style.transform = `translateY(${e.clientY - dayDrag.startY}px)`;
+
+        while (true) {
+            const dayRect = dayDrag.dayEl.getBoundingClientRect();
+            const dayCenter = dayRect.top + dayRect.height / 2;
+
+            const prev = dayDrag.siblings[dayDrag.index - 1];
+            if (prev) {
+                const prevRect = prev.getBoundingClientRect();
+                if (dayCenter < prevRect.top + prevRect.height / 2) {
+                    dayDrag.listEl.insertBefore(dayDrag.dayEl, prev);
+                    dayDrag.siblings[dayDrag.index] = prev;
+                    dayDrag.siblings[dayDrag.index - 1] = dayDrag.dayEl;
+                    [days[dayDrag.index - 1], days[dayDrag.index]] = [days[dayDrag.index], days[dayDrag.index - 1]];
+                    dayDrag.index -= 1;
+                    dayDrag.startY -= (prevRect.height + DAY_LIST_GAP_PX);
+                    dayDrag.dayEl.style.transform = `translateY(${e.clientY - dayDrag.startY}px)`;
+                    continue;
+                }
+            }
+
+            const next = dayDrag.siblings[dayDrag.index + 1];
+            if (next) {
+                const nextRect = next.getBoundingClientRect();
+                if (dayCenter > nextRect.top + nextRect.height / 2) {
+                    dayDrag.listEl.insertBefore(next, dayDrag.dayEl);
+                    dayDrag.siblings[dayDrag.index] = next;
+                    dayDrag.siblings[dayDrag.index + 1] = dayDrag.dayEl;
+                    [days[dayDrag.index], days[dayDrag.index + 1]] = [days[dayDrag.index + 1], days[dayDrag.index]];
+                    dayDrag.index += 1;
+                    dayDrag.startY += (nextRect.height + DAY_LIST_GAP_PX);
+                    dayDrag.dayEl.style.transform = `translateY(${e.clientY - dayDrag.startY}px)`;
+                    continue;
+                }
+            }
+            break;
+        }
+    });
+
+    function endDayDrag(e) {
+        if (!dayDrag || (e && e.pointerId !== dayDrag.pointerId)) return;
+        dayDrag.dayEl.style.transform = '';
+        dayDrag.dayEl.classList.remove('is-dragging');
+        dayDrag = null;
+        render();
+    }
+    editorEl.addEventListener('pointerup', endDayDrag);
+    editorEl.addEventListener('pointercancel', endDayDrag);
 
     render();
 }

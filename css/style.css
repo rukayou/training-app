@@ -777,10 +777,8 @@ button.btn-primary:active {
     will-change: transform;
 }
 
-.training-routine-editor-exercise-name {
+.training-routine-editor-exercise-name-input {
     font-weight: 700;
-    font-size: 0.88rem;
-    overflow-wrap: anywhere;
 }
 
 .training-routine-editor-exercise-body {
@@ -865,10 +863,17 @@ button.btn-primary:active {
     margin-left: auto;
 }
 
-.training-routine-editor-day-move-up:disabled,
-.training-routine-editor-day-move-down:disabled {
-    opacity: 0.35;
-    cursor: default;
+.training-routine-editor-day-drag-handle {
+    touch-action: none;
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.training-routine-editor-day.is-dragging {
+    position: relative;
+    z-index: 5;
+    box-shadow: var(--shadow-panel);
+    cursor: grabbing;
 }
 
 .training-routine-editor-settings {
