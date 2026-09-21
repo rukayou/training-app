@@ -14,6 +14,37 @@ function escapeHtml(str) {
         .replace(/'/g, "&#039;");
 }
 
+// 装飾専用のインラインSVGアイコン。外部ファイルを増やさずに済み、strokeが
+// currentColor なので置いた場所の文字色にそのまま追従する(テーマ側で色を
+// 決められる)。全て aria-hidden なので、読み上げは元々のテキストラベル
+// (「開始」「削除」など)や aria-label がそのまま担当する。
+const ICONS = {
+    dumbbell: '<path d="M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/>',
+    flame: '<path d="M12 3s5 4 5 8a5 5 0 0 1-10 0c0-1.5.7-2.8 1.5-3.7C9 8.8 9.5 10 10.5 10 10.5 7 12 5 12 3Z"/>',
+    layers: '<path d="m12 3 8 4.5-8 4.5-8-4.5L12 3Z"/><path d="m4.5 12.5 7.5 4.2 7.5-4.2"/>',
+    repeat: '<path d="M4 9V7.5A2.5 2.5 0 0 1 6.5 5H17"/><path d="m14.5 2.5 3 2.5-3 2.5"/><path d="M20 15v1.5a2.5 2.5 0 0 1-2.5 2.5H7"/><path d="m9.5 21.5-3-2.5 3-2.5"/>',
+    calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8.5 3v4M15.5 3v4"/>',
+    chevronDown: '<path d="m6 9.5 6 6 6-6"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+    plus: '<path d="M12 5.5v13M5.5 12h13"/>',
+    trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l.9 12.2a2 2 0 0 0 2 1.8h5.2a2 2 0 0 0 2-1.8L17.5 7"/>',
+    grip: '<path d="M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01" stroke-width="2.6"/>',
+    play: '<path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" stroke-linejoin="round"/>',
+    flag: '<path d="M5.5 21V4M5.5 5h11l-2 3.5 2 3.5h-11"/>',
+    chart: '<path d="M4 19.5h16"/><path d="m5 15 4.5-5 3.5 3 5.5-7"/>',
+    arrowUp: '<path d="M12 19V6M6.5 11.5 12 6l5.5 5.5"/>',
+    arrowDown: '<path d="M12 5v13M6.5 12.5 12 18l5.5-5.5"/>',
+    close: '<path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/>',
+    bell: '<path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
+};
+
+function icon(name, cls = '') {
+    const body = ICONS[name];
+    if (!body) return '';
+    return `<svg class="icon${cls ? ` ${cls}` : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
+
 // A quick, self-dismissing confirmation (e.g. after saving a routine or
 // finishing a workout) - unlike a full notification, nobody needs to read
 // or act on it, so it fades out on its own after ~1.5s rather than sticking
@@ -72,13 +103,19 @@ function buildTrendSvgMarkup(points) {
     };
     const formatValue = (v) => (Number.isInteger(v) ? `${v}` : v.toFixed(1));
 
+    // 折れ線の下を塗るためのパス - 線と同じ座標をたどってから、
+    // プロット領域の底辺まで降ろして閉じる。
+    const areaPath = `M${coords[0]} L${coords.slice(1).join(' L')} L${xAt(points.length - 1).toFixed(1)},${(height - padding.bottom).toFixed(1)} L${xAt(0).toFixed(1)},${(height - padding.bottom).toFixed(1)} Z`;
+
     const circles = points.map((p, i) => {
         const [x, y] = coords[i].split(',');
         // Alternate the value label above/below the line itself so two
         // consecutive close-together points don't overlap their text.
         const labelY = i % 2 === 0 ? Number(y) - 10 : Number(y) + 18;
+        // 最新の点だけ少し大きく・白フチを強めて「今ここ」を目立たせる。
+        const isLatest = i === points.length - 1;
         return `
-            <circle cx="${x}" cy="${y}" r="3.5" fill="var(--primary)" />
+            <circle cx="${x}" cy="${y}" r="${isLatest ? 5 : 3.5}" class="training-chart-point${isLatest ? ' is-latest' : ''}" />
             <text x="${x}" y="${labelY}" class="training-chart-point-label" text-anchor="middle">${formatValue(p.value)}</text>
             ${shouldLabelDate(i) ? `<text x="${x}" y="${height - 8}" class="training-chart-date-label" text-anchor="middle">${formatDate(p.date)}</text>` : ''}
         `;
@@ -90,17 +127,27 @@ function buildTrendSvgMarkup(points) {
     const deltaText = delta === null || delta === 0
         ? ''
         : delta > 0
-            ? ` <span class="training-chart-delta-up">↑${formatValue(delta)}</span>`
-            : ` <span class="training-chart-delta-down">↓${formatValue(Math.abs(delta))}</span>`;
+            ? ` <span class="training-chart-delta-up">${icon('arrowUp')}${formatValue(delta)}</span>`
+            : ` <span class="training-chart-delta-down">${icon('arrowDown')}${formatValue(Math.abs(delta))}</span>`;
 
     return `
-        <p class="training-chart-summary">最新: <strong>${formatValue(latest)}kg</strong>${deltaText}</p>
+        <p class="training-chart-summary">
+            <span class="training-chart-summary-label">最新</span>
+            <strong class="training-chart-summary-value">${formatValue(latest)}<span class="training-chart-summary-unit">kg</span></strong>${deltaText}
+        </p>
         <svg class="training-chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="成長トレンド、最新${formatValue(latest)}キログラム">
+            <defs>
+                <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
+                </linearGradient>
+            </defs>
             <text x="${padding.left}" y="14" class="training-chart-range-label">${formatValue(maxV)}kg</text>
             <text x="${padding.left}" y="${height - padding.bottom + 14}" class="training-chart-range-label">${formatValue(minV)}kg</text>
             <line x1="${padding.left}" y1="${padding.top}" x2="${width - padding.right}" y2="${padding.top}" class="training-chart-gridline" />
             <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" class="training-chart-gridline" />
-            <polyline points="${coords.join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+            <path d="${areaPath}" class="training-chart-area" />
+            <polyline points="${coords.join(' ')}" class="training-chart-line" />
             ${circles}
         </svg>
     `;
@@ -512,13 +559,17 @@ function formatRestTime(totalSeconds) {
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// ボタンの数・並び・役割は据え置き。末尾の進捗バーだけが新しい装飾要素で、
+// カウントダウンを書き換えるのと同じ場所(startRestTimerのrender)で幅を
+// 更新する - タイマーのロジック自体には手を入れていない。
 function restTimerHtml(exIndex, remainingSeconds) {
     return `
         <div class="training-rest-timer" data-ex="${exIndex}">
             <button type="button" class="action-btn training-rest-adjust" data-action="ex-rest-minus" data-ex="${exIndex}">-15秒</button>
             <span class="training-rest-remaining">残り ${formatRestTime(remainingSeconds)}</span>
             <button type="button" class="action-btn training-rest-adjust" data-action="ex-rest-plus" data-ex="${exIndex}">+15秒</button>
-            <button type="button" class="action-btn training-rest-cancel" data-action="ex-rest-cancel" data-ex="${exIndex}">✕</button>
+            <button type="button" class="action-btn training-rest-cancel" data-action="ex-rest-cancel" data-ex="${exIndex}" aria-label="レストを中止">${icon('close')}</button>
+            <span class="training-rest-progress"><span class="training-rest-progress-fill" style="width:100%"></span></span>
         </div>
     `;
 }
@@ -526,7 +577,7 @@ function restTimerHtml(exIndex, remainingSeconds) {
 function restAlarmHtml(exIndex) {
     return `
         <div class="training-rest-alarm" data-ex="${exIndex}">
-            <span class="training-rest-alarm-label">⏰ レスト終了！</span>
+            <span class="training-rest-alarm-label">${icon('bell')} レスト終了！</span>
             <button type="button" class="action-btn training-rest-stop" data-action="ex-rest-stop" data-ex="${exIndex}">停止</button>
         </div>
     `;
@@ -701,9 +752,19 @@ function startRestTimer(exIndex, actionsEl, endTimestamp) {
     const startBtn = actionsEl.querySelector(`[data-action="ex-rest-start"][data-ex="${exIndex}"]`);
     if (startBtn) startBtn.outerHTML = restTimerHtml(exIndex, computeRemaining());
 
+    // 進捗バーの基準。再開時は「再開した時点の残り」が満タンになるが、
+    // 表示の意味は常に「このレストの残り時間」で一貫しているので問題ない。
+    // ±15秒で残りが基準を超えることがあるため100%で頭打ちにする。
+    const totalSeconds = Math.max(1, computeRemaining());
+
     const render = () => {
-        const label = actionsEl.querySelector(`.training-rest-timer[data-ex="${exIndex}"] .training-rest-remaining`);
-        if (label) label.textContent = `残り ${formatRestTime(computeRemaining())}`;
+        const remaining = computeRemaining();
+        const timerEl = actionsEl.querySelector(`.training-rest-timer[data-ex="${exIndex}"]`);
+        if (!timerEl) return;
+        const label = timerEl.querySelector('.training-rest-remaining');
+        if (label) label.textContent = `残り ${formatRestTime(remaining)}`;
+        const fill = timerEl.querySelector('.training-rest-progress-fill');
+        if (fill) fill.style.width = `${Math.min(100, (remaining / totalSeconds) * 100).toFixed(1)}%`;
     };
 
     // Reaching zero hands off to the alarm loop rather than reverting
@@ -875,9 +936,10 @@ function exerciseBlockHtml(ex, i) {
     return `
         <div class="training-exercise-block" data-ex="${i}" data-status="pending">
             <div class="training-exercise-header">
+                <span class="training-exercise-chip">${icon('dumbbell')}</span>
                 <span class="training-exercise-name">${escapeHtml(ex.name)}</span>
                 <div class="training-exercise-actions">${exerciseActionsHtml(i)}</div>
-                <span class="training-exercise-done-badge hidden">✓ 予定通り <a href="#" class="training-undo-link" data-action="ex-undo" data-ex="${i}">取り消す</a></span>
+                <span class="training-exercise-done-badge hidden">${icon('check')} 予定通り <a href="#" class="training-undo-link" data-action="ex-undo" data-ex="${i}">取り消す</a></span>
             </div>
             <div class="training-exercise-body"></div>
         </div>
@@ -890,17 +952,23 @@ function exerciseBlockHtml(ex, i) {
 // the title above already shows the routine's label.
 function trainingMetricsRowHtml(todayLog) {
     const totalSets = todayLog ? todayLog.exercises.reduce((sum, ex) => sum + ex.sets.length, 0) : null;
+    // icon/色は表示専用の付加情報 - 値の算出自体は今までどおり。数値と単位を
+    // 分けて持つのは、数値だけを大きく・単位を小さく組んで桁を揃えるため
+    // (カウントアップ中に見た目が揺れないよう、CSS側で tabular-nums 指定)。
     const metrics = [
-        { key: 'duration', label: 'トレーニング時間', value: todayLog?.duration_minutes ? `${todayLog.duration_minutes}分` : '-' },
-        { key: 'volume', label: '総ボリューム', value: todayLog ? `${todayLog.volume}kg` : '-' },
-        { key: 'exercises', label: '種目数', value: todayLog ? `${todayLog.exercises.length}種目` : '-' },
-        { key: 'sets', label: 'セット数', value: todayLog ? `${totalSets}セット` : '-' },
+        { key: 'duration', label: 'トレーニング時間', icon: 'clock', num: todayLog?.duration_minutes ?? null, unit: '分' },
+        { key: 'volume', label: '総ボリューム', icon: 'flame', num: todayLog ? todayLog.volume : null, unit: 'kg' },
+        { key: 'exercises', label: '種目数', icon: 'layers', num: todayLog ? todayLog.exercises.length : null, unit: '種目' },
+        { key: 'sets', label: 'セット数', icon: 'repeat', num: todayLog ? totalSets : null, unit: 'セット' },
     ];
     return `
         <div class="training-metrics-row">
             ${metrics.map((m) => `
-                <div class="training-metric">
-                    <span class="training-metric-value" data-metric="${m.key}">${escapeHtml(m.value)}</span>
+                <div class="training-metric" data-metric-key="${m.key}">
+                    <span class="training-metric-chip">${icon(m.icon)}</span>
+                    <span class="training-metric-value" data-metric="${m.key}">${m.num === null
+                        ? '<span class="training-metric-empty">-</span>'
+                        : `${escapeHtml(String(m.num))}<span class="training-metric-unit">${escapeHtml(m.unit)}</span>`}</span>
                     <span class="training-metric-label">${escapeHtml(m.label)}</span>
                 </div>
             `).join('')}
@@ -910,8 +978,8 @@ function trainingMetricsRowHtml(todayLog) {
 
 function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog }) {
     const countHtml = isOverdue
-        ? `⚠️ ${overdueDays}日以上お休み中`
-        : 'ワークアウト開始';
+        ? `${icon('flag')}<span>${overdueDays}日以上お休み中</span>`
+        : `${icon('play')}<span>ワークアウト開始</span>`;
 
     const exerciseBlocks = exercises.map((ex, i) => exerciseBlockHtml(ex, i)).join('');
 
@@ -927,7 +995,7 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
             ${trainingMetricsRowHtml(todayLog)}
             <div class="training-header-actions">
                 <button type="button" class="training-start-toggle training-status-pill ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
-                    ${countHtml} <span class="training-chevron">▾</span>
+                    ${countHtml} <span class="training-chevron">${icon('chevronDown')}</span>
                 </button>
             </div>
         </div>
@@ -937,7 +1005,10 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
                 <button type="submit" class="btn-primary training-save-btn">ワークアウト終了</button>
             </form>
             <div class="training-chart-section">
-                <select class="training-exercise-select">${selectOptions}</select>
+                <div class="training-section-head">
+                    <span class="training-section-title">${icon('chart')} 成長トレンド</span>
+                    <select class="training-exercise-select">${selectOptions}</select>
+                </div>
                 <div class="training-chart-wrap"></div>
             </div>
         </div>
@@ -956,7 +1027,7 @@ function weekStripHtml(logs, todayStr) {
         const isToday = dateStr === todayStr;
         const hasLog = loggedDates.has(dateStr);
         return `
-            <div class="week-strip-day ${isToday ? 'is-today' : ''}">
+            <div class="week-strip-day ${isToday ? 'is-today' : ''} ${hasLog ? 'is-logged' : ''}">
                 <span class="week-strip-weekday">${weekdayLabels[i]}</span>
                 <span class="week-strip-date">${dayNum}</span>
                 <span class="week-strip-dot" style="visibility:${hasLog ? 'visible' : 'hidden'}"></span>
@@ -989,7 +1060,7 @@ function routineSetRowHtml(group, dayIndex, exIndex, groupIndex, removable) {
     return `
         <div class="training-routine-editor-set-row swipe-row" data-group="${groupIndex}">
             <div class="swipe-row-actions">
-                <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-group="${groupIndex}" ${removable ? '' : 'disabled'}>削除</button>
+                <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-set" data-action="set-remove" data-day="${dayIndex}" data-ex="${exIndex}" data-group="${groupIndex}" ${removable ? '' : 'disabled'}>${icon('trash')}<span>削除</span></button>
             </div>
             <div class="swipe-row-content training-routine-editor-set-row-content">
                 ${setCountSelectHtml(group.count, `class="training-routine-editor-count-select" data-group="${groupIndex}"`)}
@@ -998,7 +1069,7 @@ function routineSetRowHtml(group, dayIndex, exIndex, groupIndex, removable) {
                 <span class="training-routine-editor-unit">kg ×</span>
                 ${repsSelectHtml(group.reps, `class="training-routine-editor-reps-select" data-group="${groupIndex}"`)}
                 <span class="training-routine-editor-unit">回</span>
-                <button type="button" class="action-btn training-routine-editor-add-set" data-action="set-add" data-day="${dayIndex}" data-ex="${exIndex}" title="セットを追加" aria-label="セットを追加">+</button>
+                <button type="button" class="action-btn training-routine-editor-add-set" data-action="set-add" data-day="${dayIndex}" data-ex="${exIndex}" title="セットを追加" aria-label="セットを追加">${icon('plus')}</button>
             </div>
         </div>
     `;
@@ -1029,7 +1100,7 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
         <div class="training-routine-editor-exercise-row" data-day="${dayIndex}" data-ex="${exIndex}" data-expanded="${expanded}">
             <div class="training-routine-editor-exercise-header swipe-row">
                 <div class="swipe-row-actions">
-                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">削除</button>
+                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">${icon('trash')}<span>削除</span></button>
                 </div>
                 <div class="swipe-row-content training-routine-editor-exercise-header-content">
                     <input type="text" class="training-routine-editor-name-input training-routine-editor-exercise-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
@@ -1071,12 +1142,12 @@ function routineDayBlockHtml(day, dayIndex, days) {
         <div class="training-routine-editor-day" data-day="${dayIndex}">
             <div class="training-routine-editor-day-header swipe-row">
                 <div class="swipe-row-actions">
-                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>削除</button>
+                    <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>${icon('trash')}<span>削除</span></button>
                 </div>
                 <div class="swipe-row-content training-routine-editor-day-header-content">
                     <span class="training-routine-editor-day-label-tag">ルーティーン${dayIndex + 1}</span>
                     <input type="text" class="training-routine-editor-label-input" value="${escapeHtml(day.label)}" placeholder="ラベル (例: 胸・三頭)">
-                    <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">↕</button>
+                    <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">${icon('grip')}</button>
                 </div>
             </div>
             <div class="training-routine-editor-exercise-list">${rows}</div>
@@ -1134,12 +1205,15 @@ function noRoutineMessageHtml() {
             <span class="training-title">筋トレルーティーン</span>
         </div>
         <div class="training-onboarding">
+            <div class="training-empty-art">${icon('dumbbell')}</div>
             <p class="training-onboarding-step">
-                <strong>ステップ1: ホーム画面に追加(推奨)</strong><br>
+                <span class="training-onboarding-step-num">1</span>
+                <strong>ホーム画面に追加(推奨)</strong><br>
                 Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップしてください。データがこの端末に残りやすくなります(追加しない場合、7日間開かないとデータが消えることがあります)。
             </p>
             <p class="training-onboarding-step">
-                <strong>ステップ2: ルーティーンを作成</strong><br>
+                <span class="training-onboarding-step-num">2</span>
+                <strong>ルーティーンを作成</strong><br>
                 上の「ルーティーン管理」タブから、トレーニングメニューを作成してください。
             </p>
         </div>
@@ -1863,8 +1937,22 @@ function unlockAudioOnFirstTap() {
     document.addEventListener('pointerdown', unlockAudio, { once: true });
 }
 
+// ヘッダーの日付。jstDateString()は既に全画面で使っている日付の正(しょう)
+// なので、表示もそこから組み立てて「今日」の定義がズレないようにする。
+function renderHeaderDate() {
+    const el = document.getElementById('appHeaderDate');
+    if (!el) return;
+    const [year, month, day] = jstDateString().split('-').map(Number);
+    // UTCで組み立ててUTCで曜日を読む - ローカルタイムゾーンを経由しないので
+    // 端末の設定に関係なくJSTの日付に対応した曜日が出る。
+    const weekdayIndex = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+    const weekday = ['日', '月', '火', '水', '木', '金', '土'][weekdayIndex];
+    el.textContent = `${month}月${day}日(${weekday})`;
+}
+
 function boot() {
     initTabs();
+    renderHeaderDate();
     loadTraining();
     loadRoutineManagement();
     registerServiceWorker();

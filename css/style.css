@@ -1,157 +1,208 @@
-/* Extracted/trimmed from AICreate public/css/style.css for the standalone training-app. */
-
-.training-card {
-    background: linear-gradient(180deg, #1a1a1a, var(--surface));
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    padding: 4px 20px;
-    box-shadow: var(--shadow-panel);
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-}
+/* 筋トレ記録 - Apple ヘルスケア/フィットネスの作法に寄せたダークテーマ。
+   見た目だけを担当し、操作の仕組み(クラス名・data-action・スワイプや
+   ドラッグの判定)は一切変えていない。機能に直結する値(.swipe-row-content
+   の transform/touch-action、.swipe-row-actions の幅、ドラッグハンドルの
+   touch-action など)は以前のまま据え置いてある。 */
 
 :root {
+    /* 背景の段階。Appleの elevated surface と同じで、階層が上がるほど明るい */
     --bg: #000000;
-    --surface: #151515;
-    --surface-soft: #202020;
-    --text-main: #f5f5f5;
-    --text-muted: #9a9a9a;
-    --accent: #4f8cff;
-    --accent-light: #7fadff;
-    --accent-deep: #2456d6;
-    --accent-wash: rgba(79, 140, 255, 0.18);
-    --line: rgba(255, 255, 255, 0.16);
-    --line-soft: rgba(255, 255, 255, 0.08);
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --surface-soft: var(--surface-2);
+
+    /* テキストの階層(label / secondaryLabel / tertiaryLabel) */
+    --text-main: #ffffff;
+    --text-muted: rgba(235, 235, 245, 0.6);
+    --text-faint: rgba(235, 235, 245, 0.3);
+
+    /* システムカラー */
+    --accent: #0a84ff;
+    --accent-light: #409cff;
+    --accent-deep: #0060df;
+    --accent-wash: rgba(10, 132, 255, 0.16);
+    --success: #30d158;
+    --warn: #ff9f0a;
+    --danger: #ff453a;
+    --purple: #bf5af2;
+    --cyan: #64d2ff;
+
+    /* メトリクス4種の担当色 */
+    --metric-duration: var(--cyan);
+    --metric-volume: var(--warn);
+    --metric-exercises: var(--success);
+    --metric-sets: var(--purple);
+
     --primary: var(--accent);
     --primary-hover: var(--accent-deep);
     --card-bg: var(--surface);
-    --card-border: var(--line);
-    --radius-lg: 24px;
+    --card-border: var(--hairline);
+
+    /* 罫線 */
+    --hairline: rgba(255, 255, 255, 0.11);
+    --hairline-strong: rgba(255, 255, 255, 0.18);
+    --line: var(--hairline);
+    --line-soft: rgba(255, 255, 255, 0.06);
+
+    /* 角丸 */
+    --radius-lg: 22px;
     --radius-md: 16px;
     --radius-sm: 10px;
     --radius-pill: 9999px;
-    --danger: #ff3b3b;
+
+    /* タイプスケール */
+    --text-display: 30px;
+    --text-title: 21px;
+    --text-headline: 17px;
+    --text-body: 15px;
+    --text-caption: 13px;
+    --text-micro: 11px;
+
+    /* 余白(4pxグリッド) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+
     --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    /* Depth system - a raised panel gets a top inner highlight (light hits
-       the upper edge) plus a soft drop shadow (it sits above the page); a
-       pressed/filled button additionally gets a colored glow under it. */
-    --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 1px 2px rgba(0, 0, 0, 0.35), 0 24px 48px -28px rgba(0, 0, 0, 0.85);
-    --shadow-btn: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 6px 14px -6px rgba(0, 0, 0, 0.55);
+
+    /* 影。カード=淡く広い落ち影、ボタン=小さく締まった影 */
+    --shadow-panel: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -20px rgba(0, 0, 0, 0.9);
+    --shadow-btn: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 4px 10px -6px rgba(0, 0, 0, 0.6);
     --shadow-btn-pressed: 0 1px 3px rgba(0, 0, 0, 0.45) inset;
-    --shadow-accent: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 10px 22px -8px rgba(79, 140, 255, 0.55);
-    --shadow-accent-hover: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 14px 28px -8px rgba(79, 140, 255, 0.65);
+    --shadow-accent: 0 6px 18px -8px rgba(10, 132, 255, 0.7);
+    --shadow-accent-hover: 0 10px 24px -8px rgba(10, 132, 255, 0.8);
     --shadow-accent-pressed: 0 1px 4px rgba(0, 0, 0, 0.4) inset;
 }
 
+/* ===== ベース ===== */
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
 body {
-    font-family: 'Plus Jakarta Sans', 'Noto Sans JP', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
     background: var(--bg);
     background-image:
-        radial-gradient(circle at 12% 6%, rgba(79, 140, 255, 0.12), transparent 40%),
-        radial-gradient(circle at 90% 94%, rgba(255, 255, 255, 0.05), transparent 42%);
+        radial-gradient(ellipse 90% 45% at 50% -8%, rgba(10, 132, 255, 0.22), transparent 70%),
+        radial-gradient(ellipse 70% 40% at 95% 100%, rgba(191, 90, 242, 0.1), transparent 70%);
     background-attachment: fixed;
+    background-repeat: no-repeat;
     color: var(--text-main);
     margin: 0;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    padding: max(12px, env(safe-area-inset-top)) 14px calc(20px + env(safe-area-inset-bottom));
     min-height: 100vh;
     box-sizing: border-box;
+    font-size: var(--text-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
 }
 
 .container {
     width: 100%;
 }
 
-button.btn-primary {
-    width: 100%;
-    background: linear-gradient(180deg, var(--accent-light), var(--accent) 55%, var(--accent-deep));
-    color: #ffffff;
-    border: 1px solid var(--accent-deep);
-    padding: 14px;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    font-weight: 700;
-    font-size: 0.98rem;
-    letter-spacing: 0.01em;
-    box-shadow: var(--shadow-accent);
-    transition: var(--transition);
-}
-
-button.btn-primary:hover {
-    background: linear-gradient(180deg, var(--accent-light), var(--accent-deep) 60%, #1a3fa8);
-    border-color: #1a3fa8;
-    color: #ffffff;
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-accent-hover);
-}
-
-button.btn-primary:active {
-    transform: translateY(1px);
-    box-shadow: var(--shadow-accent-pressed);
-}
-
 .app-shell {
     width: 100%;
-    max-width: 960px;
-    margin: 20px auto;
+    max-width: 720px;
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--space-4);
 }
+
+/* 全アイコン共通。currentColor追従なので置いた場所の文字色になる */
+.icon {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    display: inline-block;
+    vertical-align: -0.125em;
+}
+
+/* ===== ヘッダー ===== */
 
 .app-header {
-    background: linear-gradient(180deg, #1a1a1a, var(--surface));
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    padding: 20px 28px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    box-shadow: var(--shadow-panel);
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-1) var(--space-2);
 }
 
-.app-main {
-    background: linear-gradient(180deg, #1a1a1a, var(--surface));
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    padding: 28px 24px;
-    flex: 1 1 auto;
+.app-header-mark {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 13px;
+    background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
+    color: #ffffff;
+    box-shadow: var(--shadow-accent);
+}
+
+.app-header-mark svg {
+    width: 24px;
+    height: 24px;
+}
+
+.app-header-text {
     min-width: 0;
-    box-shadow: var(--shadow-panel);
+}
+
+.app-header h1 {
+    margin: 0;
+    font-size: var(--text-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+}
+
+.app-header-date {
+    margin: 2px 0 0;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--text-muted);
 }
 
 .app-footer {
     text-align: center;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    padding: 4px 0 8px;
+    color: var(--text-faint);
+    font-size: var(--text-micro);
+    padding: var(--space-2) 0 var(--space-4);
 }
 
-.app-header h1 {
-    white-space: nowrap;
-    margin-bottom: 0;
+.app-footer p {
+    margin: 0;
 }
+
+/* ===== タブ(セグメンテッドコントロール風) ===== */
 
 .app-tabs {
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding: 3px;
+    background: rgba(118, 118, 128, 0.22);
+    border-radius: var(--radius-sm);
 }
 
 .app-tab-btn {
-    background: var(--surface-soft);
-    border: 1px solid var(--line);
+    flex: 1;
+    min-height: 34px;
+    padding: var(--space-2) var(--space-2);
+    border: none;
+    border-radius: 7px;
+    background: transparent;
     color: var(--text-muted);
-    padding: 8px 18px;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 600;
     font-family: inherit;
-    box-shadow: var(--shadow-btn);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    cursor: pointer;
     transition: var(--transition);
 }
 
@@ -160,56 +211,62 @@ button.btn-primary:active {
 }
 
 .app-tab-btn[aria-selected="true"] {
-    background: var(--accent-wash);
-    color: var(--accent);
-    border-color: var(--accent);
+    background: var(--surface-3);
+    color: var(--text-main);
+    box-shadow: 0 3px 8px -4px rgba(0, 0, 0, 0.8);
 }
 
-.training-card.rest-alarming {
-    animation: rest-alarm-flash 1s ease-in-out infinite;
-}
+/* ===== 週間カレンダーストリップ ===== */
 
 .week-strip {
-    display: flex;
-    justify-content: space-between;
-    gap: 4px;
-    background: linear-gradient(180deg, #1a1a1a, var(--surface));
-    border: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--space-1);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
-    padding: 12px 8px;
+    padding: var(--space-3) var(--space-2);
     box-shadow: var(--shadow-panel);
 }
 
 .week-strip-day {
-    flex: 1 1 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
 }
 
 .week-strip-weekday {
-    font-size: 0.68rem;
-    color: var(--text-muted);
+    font-size: var(--text-micro);
+    font-weight: 600;
+    color: var(--text-faint);
 }
 
 .week-strip-date {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
+    font-size: var(--text-caption);
     font-weight: 600;
-    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
     color: var(--text-main);
+    border: 1.5px solid transparent;
+}
+
+/* 記録済みの日はアクセント色のリング、今日は塗り */
+.week-strip-day.is-logged .week-strip-date {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .week-strip-day.is-today .week-strip-date {
     background: var(--accent);
+    border-color: var(--accent);
     color: #ffffff;
     box-shadow: var(--shadow-accent);
-    font-weight: 700;
 }
 
 .week-strip-dot {
@@ -219,280 +276,313 @@ button.btn-primary:active {
     background: var(--accent);
 }
 
-.training-toggle {
-    width: 100%;
-    background: none;
-    border: none;
-    padding: 12px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    text-align: left;
-    font-family: inherit;
+.week-strip-day.is-today .week-strip-dot {
+    background: var(--text-muted);
 }
 
-.training-title {
-    font-weight: 700;
-    font-size: 1.02rem;
-    color: var(--text-main);
+/* ===== トレーニングカード ===== */
+
+.training-card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-panel);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.training-count {
-    font-weight: 600;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    white-space: nowrap;
+.training-card.rest-alarming {
+    border-color: var(--danger);
+    animation: rest-alarm-pulse 1s ease-in-out infinite;
 }
 
-.training-chevron {
-    transition: var(--transition);
-    flex-shrink: 0;
+@keyframes rest-alarm-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(255, 69, 58, 0.28); }
 }
 
 .training-header {
-    width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 0;
+    gap: var(--space-3);
 }
 
 .training-header-top {
     display: flex;
+    align-items: baseline;
     justify-content: space-between;
-    align-items: center;
-    gap: 12px;
+    gap: var(--space-2);
+    flex-wrap: wrap;
 }
+
+.training-title {
+    font-size: var(--text-title);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.training-count {
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* ===== メトリクス(Appleヘルスケアのサマリー風) ===== */
 
 .training-metrics-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
 }
 
 .training-metric {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 8px 4px;
-    background: var(--surface-soft);
-    border: 1px solid var(--line-soft);
+    gap: 5px;
+    padding: var(--space-3);
+    background: var(--surface-2);
     border-radius: var(--radius-sm);
+    min-width: 0;
 }
 
+.training-metric-chip {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 16px;
+    /* 担当色は下の data-metric-key 側で上書きする */
+    color: var(--accent);
+    background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.training-metric[data-metric-key="duration"] .training-metric-chip { color: var(--metric-duration); }
+.training-metric[data-metric-key="volume"] .training-metric-chip { color: var(--metric-volume); }
+.training-metric[data-metric-key="exercises"] .training-metric-chip { color: var(--metric-exercises); }
+.training-metric[data-metric-key="sets"] .training-metric-chip { color: var(--metric-sets); }
+
 .training-metric-value {
-    font-weight: 700;
-    font-size: 0.92rem;
-    color: var(--text-main);
+    font-size: var(--text-title);
+    font-weight: 800;
+    line-height: 1.15;
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.training-metric-unit {
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.training-metric-empty {
+    color: var(--text-faint);
 }
 
 .training-metric-label {
-    font-size: 0.68rem;
+    font-size: var(--text-micro);
+    font-weight: 600;
     color: var(--text-muted);
 }
 
-.training-status-pill {
-    width: 100%;
-    justify-content: center;
+/* ===== ワークアウト開始トグル ===== */
+
+.training-header-actions {
+    display: flex;
 }
 
 .training-start-toggle {
-    flex-shrink: 0;
-    background: var(--surface-soft);
-    color: var(--text-main);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    padding: 8px 14px;
-    font-weight: 700;
-    font-size: 0.82rem;
-    font-family: inherit;
-    cursor: pointer;
+    width: 100%;
     display: flex;
     align-items: center;
-    gap: 6px;
-    box-shadow: var(--shadow-btn);
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 48px;
+    padding: var(--space-3) var(--space-4);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: linear-gradient(180deg, var(--accent-light), var(--accent-deep));
+    color: #ffffff;
+    font-family: inherit;
+    font-size: var(--text-headline);
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow-accent);
     transition: var(--transition);
 }
 
+.training-start-toggle .icon {
+    font-size: 19px;
+}
+
 .training-start-toggle:hover {
-    background: var(--text-main);
-    color: #0a0a0a;
-    border-color: var(--text-main);
+    box-shadow: var(--shadow-accent-hover);
     transform: translateY(-1px);
 }
 
 .training-start-toggle:active {
-    transform: translateY(1px);
-    box-shadow: var(--shadow-btn-pressed);
+    transform: scale(0.985);
+    box-shadow: var(--shadow-accent-pressed);
 }
 
 .training-start-toggle.is-overdue {
-    background: rgba(255, 82, 82, 0.14);
-    color: #ff6b6b;
-    border-color: rgba(255, 82, 82, 0.5);
+    background: rgba(255, 159, 10, 0.16);
+    color: var(--warn);
+    border: 1px solid rgba(255, 159, 10, 0.45);
+    box-shadow: none;
+}
+
+.training-chevron {
+    display: inline-flex;
+    font-size: 17px;
+    opacity: 0.85;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .training-start-toggle[aria-expanded="true"] .training-chevron {
     transform: rotate(180deg);
 }
 
+/* ===== 種目リスト(inset grouped list 風) ===== */
+
 .training-list {
-    padding: 0 0 16px;
+    margin-top: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
+    animation: panel-in 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes panel-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.training-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 }
 
 .training-exercise-block {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-bottom: 14px;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
 }
 
 .training-exercise-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2);
     flex-wrap: wrap;
+    min-height: 40px;
 }
 
+.training-exercise-chip {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    font-size: 17px;
+    color: var(--accent);
+    background: var(--accent-wash);
+}
+
+.training-exercise-block[data-status="done"] .training-exercise-chip {
+    color: var(--success);
+    background: rgba(48, 209, 88, 0.16);
+}
+
+/* min-width を持たせないと、展開中(完了/閉じる/レスト開始の3ボタンが出る
+   状態)で名前の幅が1文字分まで潰され、縦書きのように折り返してしまう。
+   幅が足りないときは名前が幅を確保し、ボタン側が次の行へ回る。 */
 .training-exercise-name {
+    font-size: var(--text-headline);
     font-weight: 700;
-    font-size: 0.88rem;
+    flex: 1 1 auto;
+    min-width: 5em;
+    overflow-wrap: anywhere;
 }
 
 .training-exercise-actions {
     display: flex;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-.training-start-btn {
-    background: var(--surface-soft);
-    color: var(--text-main);
-    border: 1px solid var(--line);
-}
-
-.training-complete-btn {
-    background: linear-gradient(180deg, var(--accent-light), var(--accent) 55%, var(--accent-deep));
-    color: #ffffff;
-    border: 1px solid var(--accent-deep);
-    box-shadow: var(--shadow-accent);
-}
-
-.training-collapse-btn {
-    background: var(--surface-soft);
-    color: var(--text-muted);
-    border: 1px solid var(--line);
-}
-
-.training-rest-btn {
-    background: var(--accent-wash);
-    color: var(--accent-light);
-    border: 1px solid transparent;
-}
-
-.training-rest-timer {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.8rem;
-}
-
-.training-rest-remaining {
-    font-weight: 700;
-    color: var(--accent);
-    min-width: 52px;
-    text-align: center;
-}
-
-.training-rest-adjust {
-    background: var(--accent-wash);
-    color: var(--accent);
-    border: 1px solid transparent;
-    padding: 6px 10px;
-    font-size: 0.75rem;
-}
-
-.training-rest-cancel {
-    background: transparent;
-    color: var(--text-muted);
-    border: 1px solid var(--line);
-    padding: 6px 10px;
-}
-
-.training-rest-alarm {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.82rem;
-    animation: rest-alarm-pulse 1s ease-in-out infinite;
-}
-
-.training-rest-alarm-label {
-    font-weight: 700;
-    color: #ff6b6b;
-}
-
-.training-rest-stop {
-    background: #ff3b3b;
-    color: #0a0a0a;
-    border: 1px solid #ff3b3b;
-    padding: 6px 12px;
+    gap: var(--space-1);
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .training-exercise-done-badge {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-main);
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
+    margin-left: auto;
+    padding: 5px 11px;
+    border-radius: var(--radius-pill);
+    background: rgba(48, 209, 88, 0.16);
+    color: var(--success);
+    font-size: var(--text-caption);
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .training-undo-link {
-    font-size: 0.75rem;
-    font-weight: 400;
     color: var(--text-muted);
-    text-decoration: underline;
+    font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px solid var(--hairline-strong);
+}
+
+.training-undo-link:hover {
+    color: var(--text-main);
 }
 
 .training-exercise-body:not(:empty) {
-    margin-top: 6px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--hairline);
 }
+
+/* ===== セット入力行 ===== */
 
 .training-set-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.82rem;
+    flex-wrap: wrap;
+    font-size: var(--text-caption);
 }
 
 .training-set-label {
     flex-shrink: 0;
     color: var(--text-muted);
-    width: 62px;
+    font-weight: 600;
 }
 
 .training-weight-input,
 .training-reps-input {
-    width: 60px;
+    width: 62px;
     padding: 8px 6px;
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
+    border: 1px solid var(--hairline);
+    background: var(--surface-3);
     color: var(--text-main);
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
+    border-radius: 9px;
     font-family: inherit;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
     box-sizing: border-box;
     transition: var(--transition);
 }
@@ -501,169 +591,348 @@ button.btn-primary:active {
 .training-reps-input:focus {
     outline: none;
     border-color: var(--accent);
-    background: #262626;
     box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 .training-set-unit {
-    flex-shrink: 0;
     color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* ===== レストタイマー ===== */
+
+.training-rest-timer {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-2) var(--space-3);
+    background: var(--surface-3);
+    border-radius: var(--radius-sm);
+}
+
+.training-rest-remaining {
+    font-size: var(--text-caption);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+    padding: 0 var(--space-1);
+}
+
+.action-btn.training-rest-adjust {
+    font-size: var(--text-micro);
+}
+
+.action-btn.training-rest-cancel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    padding: 8px 10px;
+}
+
+/* 残り時間に合わせて幅が縮む進捗バー(装飾のみ) */
+.training-rest-progress {
+    position: absolute;
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: 6px;
+    height: 3px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.training-rest-progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 0.9s linear;
+}
+
+.training-rest-alarm {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-3);
+    background: rgba(255, 69, 58, 0.15);
+    border: 1px solid rgba(255, 69, 58, 0.4);
+    border-radius: var(--radius-sm);
+}
+
+.training-rest-alarm-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--text-caption);
+    font-weight: 700;
+    color: var(--danger);
+}
+
+.action-btn.training-rest-stop {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #ffffff;
+    margin-left: auto;
 }
 
 .training-save-btn {
-    margin-top: 4px;
+    margin-top: var(--space-2);
 }
+
+/* ===== チャート ===== */
 
 .training-chart-section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line-soft);
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--hairline);
 }
 
-.training-exercise-select {
-    align-self: flex-start;
-    padding: 6px 10px;
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
+.training-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.training-section-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-headline);
+    font-weight: 700;
+}
+
+.training-section-title .icon {
+    color: var(--accent);
+    font-size: 18px;
+}
+
+.training-exercise-select,
+.training-routine-editor-rest-select {
+    padding: 9px 12px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-2);
     color: var(--text-main);
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
     font-family: inherit;
-    font-size: 0.82rem;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.training-exercise-select:focus,
+.training-routine-editor-rest-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 .training-chart-wrap {
-    width: 100%;
-    height: 200px;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
 }
 
 .training-chart-svg {
     width: 100%;
-    height: 100%;
+    height: 190px;
+    display: block;
+    overflow: visible;
 }
 
-.training-chart-empty {
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--text-muted);
+.training-chart-area {
+    fill: url(#trendFill);
 }
 
-.training-chart-summary {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-main);
+.training-chart-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
 }
 
-.training-chart-summary strong {
-    font-size: 0.95rem;
+.training-chart-point {
+    fill: var(--accent);
+    stroke: var(--surface-2);
+    stroke-width: 2;
 }
 
-.training-chart-delta-up {
-    color: var(--accent);
-    font-weight: 600;
-}
-
-.training-chart-delta-down {
-    color: var(--text-muted);
-    font-weight: 600;
+.training-chart-point.is-latest {
+    fill: #ffffff;
+    stroke: var(--accent);
+    stroke-width: 3;
 }
 
 .training-chart-gridline {
-    stroke: var(--line-soft);
+    stroke: var(--hairline);
     stroke-width: 1;
+    stroke-dasharray: 3 4;
 }
 
-.training-chart-range-label {
-    fill: var(--text-muted);
-    font-size: 9px;
+.training-chart-range-label,
+.training-chart-date-label {
+    fill: var(--text-faint);
+    font-size: 10px;
+    font-weight: 600;
     font-family: inherit;
 }
 
 .training-chart-point-label {
-    fill: var(--text-main);
-    font-size: 9px;
-    font-weight: 600;
-    font-family: inherit;
-}
-
-.training-chart-date-label {
     fill: var(--text-muted);
-    font-size: 8px;
-    font-family: inherit;
-}
-
-.training-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-}
-
-.training-start-toggle {
-    flex-shrink: 0;
-    background: var(--surface-soft);
-    color: var(--text-main);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    padding: 8px 14px;
+    font-size: 10px;
     font-weight: 700;
-    font-size: 0.82rem;
     font-family: inherit;
-    cursor: pointer;
+}
+
+.training-chart-summary {
     display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-2);
+    flex-wrap: wrap;
+}
+
+.training-chart-summary-label {
+    font-size: var(--text-micro);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.training-chart-summary-value {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.training-chart-summary-unit {
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.training-chart-delta-up,
+.training-chart-delta-down {
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    box-shadow: var(--shadow-btn);
-    transition: var(--transition);
+    gap: 2px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    font-size: var(--text-micro);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
-.training-start-toggle:hover {
-    background: var(--text-main);
-    color: #0a0a0a;
-    border-color: var(--text-main);
-    transform: translateY(-1px);
+.training-chart-delta-up {
+    color: var(--success);
+    background: rgba(48, 209, 88, 0.16);
 }
 
-.training-start-toggle:active {
-    transform: translateY(1px);
-    box-shadow: var(--shadow-btn-pressed);
+.training-chart-delta-down {
+    color: var(--text-muted);
+    background: rgba(235, 235, 245, 0.1);
 }
+
+.training-chart-empty {
+    margin: 0;
+    padding: var(--space-5) var(--space-3);
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--text-caption);
+}
+
+/* ===== 空状態・オンボーディング ===== */
 
 .training-no-routine-message {
     margin: 0;
-    padding: 12px 0;
-    font-size: 0.85rem;
+    padding: var(--space-5);
+    text-align: center;
     color: var(--text-muted);
+    font-size: var(--text-caption);
 }
 
 .training-onboarding {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 4px 0 16px;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+
+.training-empty-art {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto var(--space-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 32px;
+    color: var(--accent);
+    background: var(--accent-wash);
 }
 
 .training-onboarding-step {
     margin: 0;
-    padding: 12px 14px;
-    background: var(--surface-soft);
-    border: 1px solid var(--line-soft);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-2);
     border-radius: var(--radius-md);
-    font-size: 0.85rem;
-    line-height: 1.6;
+    font-size: var(--text-caption);
     color: var(--text-muted);
+    line-height: 1.7;
 }
 
 .training-onboarding-step strong {
     color: var(--text-main);
+    font-size: var(--text-body);
+}
+
+.training-onboarding-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #ffffff;
+    font-size: var(--text-micro);
+    font-weight: 800;
+    vertical-align: 2px;
+}
+
+/* ===== ルーティーン管理 ===== */
+
+.app-main {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    box-shadow: var(--shadow-panel);
+    animation: panel-in 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.routine-management-intro {
+    margin: var(--space-2) 0 var(--space-4);
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+    line-height: 1.7;
 }
 
 .training-routine-editor {
-    padding: 12px 0 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
 }
 
 .training-routine-editor-days {
@@ -673,46 +942,81 @@ button.btn-primary:active {
 }
 
 .training-routine-editor-day {
-    border: 1px solid var(--line);
+    border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
-    padding: 12px;
+    padding: var(--space-3);
     display: flex;
     flex-direction: column;
     gap: 10px;
+    background: var(--surface);
+}
+
+.training-routine-editor-day.is-dragging {
+    position: relative;
+    z-index: 5;
+    border-color: var(--accent);
+    box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.95);
+    cursor: grabbing;
 }
 
 .training-routine-editor-day-header-content {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
 }
 
 .training-routine-editor-day-label-tag {
+    font-size: var(--text-micro);
     font-weight: 700;
-    font-size: 0.8rem;
-    color: var(--text-muted);
+    color: var(--text-faint);
     flex-shrink: 0;
+    letter-spacing: 0.02em;
 }
 
 .training-routine-editor-label-input,
 .training-routine-editor-name-input {
     flex: 1;
     min-width: 90px;
-    padding: 8px 10px;
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
+    padding: 9px 11px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-2);
     color: var(--text-main);
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
     font-family: inherit;
-    font-size: 0.88rem;
+    font-size: var(--text-body);
     box-sizing: border-box;
+    transition: var(--transition);
+}
+
+.training-routine-editor-label-input:focus,
+.training-routine-editor-name-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.training-routine-editor-exercise-name-input {
+    font-weight: 700;
+}
+
+.training-routine-editor-day-drag-handle {
+    /* touch-action:none はドラッグ並び替えの前提。変更しない */
+    touch-action: none;
+    cursor: grab;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 10px;
+    color: var(--text-muted);
+    font-size: 17px;
 }
 
 .training-routine-editor-exercise-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .training-routine-editor-exercise-row {
@@ -729,11 +1033,185 @@ button.btn-primary:active {
     flex-wrap: wrap;
 }
 
-/* 削除ボタンをデフォルト非表示にし、行を左スワイプした時だけ露出させる
-   汎用パターン。.swipe-row(クリッピング枠)の中に、右側に隠れている
-   .swipe-row-actions(削除パネル)と、スワイプでtranslateXする
-   .swipe-row-content(通常表示)を重ねて置く。セット行・種目ヘッダーの
-   両方で共通利用(initSwipeToRevealが挙動を制御)。 */
+.training-routine-editor-exercise-actions {
+    display: flex;
+    gap: var(--space-1);
+    margin-left: auto;
+}
+
+.training-routine-editor-exercise-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-top: 2px;
+}
+
+.training-routine-editor-exercise-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 2px;
+}
+
+/* 常時表示の「新規種目」入力欄。左右のpaddingを0にしてあるのは、
+   確定済み種目とセット行の幅を完全に揃えるため(横paddingを足すと
+   行が狭くなり「+」だけ折り返されてしまう)。 */
+.training-routine-editor-exercise-draft {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+}
+
+.training-routine-editor-exercise-draft::before {
+    content: '新しい種目';
+    margin: 0 var(--space-3);
+    font-size: var(--text-micro);
+    font-weight: 700;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+}
+
+.training-routine-editor-exercise-draft > .training-routine-editor-name-input {
+    margin: 0 var(--space-3);
+    width: auto;
+}
+
+.training-routine-editor-set-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.training-routine-editor-set-row-content {
+    display: flex;
+    align-items: center;
+    /* 幅390pxの端末でも1行に収まるよう、gapと各要素を詰めてある。
+       ここを広げると「+」だけが次の行へ折り返すので注意。 */
+    gap: 5px;
+    flex-wrap: wrap;
+    font-size: var(--text-caption);
+}
+
+/* 固定幅を付けない(付けると行の必要幅が利用可能幅を超えて折り返す) */
+.training-routine-editor-set-label {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.training-routine-editor-count-select,
+.training-routine-editor-weight-select,
+.training-routine-editor-reps-select {
+    padding: 8px 6px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-3);
+    color: var(--text-main);
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: var(--text-caption);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    box-sizing: border-box;
+}
+
+.training-routine-editor-count-select:focus,
+.training-routine-editor-weight-select:focus,
+.training-routine-editor-reps-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.training-routine-editor-count-select {
+    width: 44px;
+}
+
+.training-routine-editor-weight-select,
+.training-routine-editor-reps-select {
+    width: 54px;
+}
+
+.action-btn.training-routine-editor-add-set {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-size: 16px;
+    color: var(--accent);
+    background: var(--accent-wash);
+    border-color: transparent;
+}
+
+.training-routine-editor-unit {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.training-routine-editor-settings {
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--hairline);
+}
+
+.training-routine-editor-rest-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.training-routine-editor-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+/* 「+ 種目を追加」「+ ルーティーンを追加」。Appleの一覧画面の追加行と同じく、
+   確定済みの行と区別がつくよう淡いアクセント色の面で持たせる。 */
+.action-btn.training-routine-editor-add-ex,
+.action-btn.training-routine-editor-add-day {
+    width: 100%;
+    min-height: 42px;
+    color: var(--accent);
+    background: var(--accent-wash);
+    border-color: transparent;
+    font-weight: 700;
+    box-shadow: none;
+}
+
+.action-btn.training-routine-editor-add-ex:hover,
+.action-btn.training-routine-editor-add-day:hover {
+    background: rgba(10, 132, 255, 0.26);
+}
+
+.training-routine-editor-save-btn {
+    width: 100%;
+}
+
+/* 読み込み失敗時の簡易表示(renderError) */
+.training-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-5) var(--space-3);
+    text-align: center;
+}
+
+.training-toggle .training-count {
+    color: var(--text-muted);
+}
+
+/* ===== スワイプで露出する削除(判定に関わる値は据え置き) ===== */
+
 .swipe-row {
     position: relative;
     overflow: hidden;
@@ -753,13 +1231,23 @@ button.btn-primary:active {
 
 .swipe-row-delete-btn {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
     border: none;
     background: var(--danger);
     color: #ffffff;
+    font-family: inherit;
     font-weight: 700;
-    font-size: 0.82rem;
+    font-size: var(--text-micro);
     cursor: pointer;
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.swipe-row-delete-btn .icon {
+    font-size: 17px;
 }
 
 .swipe-row-delete-btn:disabled {
@@ -777,154 +1265,20 @@ button.btn-primary:active {
     will-change: transform;
 }
 
-.training-routine-editor-exercise-name-input {
-    font-weight: 700;
+/* 下書き欄の中の行は、親(surface-2)と同じ背景でないと
+   スワイプ前に下の削除パネルが透けて見えてしまう */
+.training-routine-editor-exercise-draft .swipe-row-content {
+    background: var(--surface-2);
 }
 
-.training-routine-editor-exercise-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 2px;
-}
-
-.training-routine-editor-exercise-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 2px;
-}
-
-/* 常時表示の「新規種目」入力欄 - 保存済みの種目行(.training-routine-editor-exercise-row)
-   と見た目で区別できるよう、破線の枠で「まだ確定していない下書き」だと
-   分かるようにする。 */
-.training-routine-editor-exercise-draft {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    /* 横方向のpaddingを付けると、種目名入力欄とセット行(.training-routine-
-       editor-set-row-content)が確定済み種目の本文より狭くなり、「+」だけ
-       折り返されてしまう(実機で発覚) - 横方向は0にして幅を完全に揃える。 */
-    padding: 10px 0;
-    border: 1px dashed var(--line);
-    border-radius: var(--radius-sm);
-}
-
-.training-routine-editor-exercise-draft > .training-routine-editor-name-input {
-    margin: 0 10px;
-    width: auto;
-}
-
-.training-routine-editor-set-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.training-routine-editor-set-row-content {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    font-size: 0.82rem;
-}
-
-.training-routine-editor-set-label {
-    flex-shrink: 0;
-    color: var(--text-muted);
-}
-
-.training-routine-editor-count-select,
-.training-routine-editor-weight-select,
-.training-routine-editor-reps-select {
-    padding: 8px 6px;
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
-    color: var(--text-main);
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    box-sizing: border-box;
-}
-
-.training-routine-editor-count-select {
-    width: 48px;
-}
-
-.training-routine-editor-weight-select,
-.training-routine-editor-reps-select {
-    width: 60px;
-}
-
-.training-routine-editor-add-set {
-    margin-left: auto;
-    padding: 6px 12px;
-    flex-shrink: 0;
-}
-
-.training-routine-editor-unit {
-    color: var(--text-muted);
-    flex-shrink: 0;
-}
-
-.training-routine-editor-exercise-actions {
-    display: flex;
-    gap: 4px;
-    margin-left: auto;
-}
-
-.training-routine-editor-day-drag-handle {
-    touch-action: none;
-    cursor: grab;
-    flex-shrink: 0;
-}
-
-.training-routine-editor-day.is-dragging {
-    position: relative;
-    z-index: 5;
-    box-shadow: var(--shadow-panel);
-    cursor: grabbing;
-}
-
-.training-routine-editor-settings {
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-}
-
-.training-routine-editor-rest-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
-
-.training-routine-editor-rest-select {
-    padding: 8px 10px;
-    border: 1px solid var(--line);
-    background: var(--surface-soft);
-    color: var(--text-main);
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    font-size: 0.85rem;
-}
-
-.training-routine-editor-footer {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.training-routine-editor-save-btn {
-    margin-left: auto;
-    width: auto;
-    padding-left: 24px;
-    padding-right: 24px;
-}
+/* ===== ボタン ===== */
 
 .action-btn {
-    border: 1px solid transparent;
-    padding: 8px 14px;
-    font-size: 0.8rem;
+    border: 1px solid var(--hairline);
+    background: var(--surface-3);
+    color: var(--text-main);
+    padding: 9px 15px;
+    font-size: var(--text-caption);
     font-family: inherit;
     border-radius: var(--radius-pill);
     font-weight: 600;
@@ -934,58 +1288,104 @@ button.btn-primary:active {
 }
 
 .action-btn:hover {
-    transform: translateY(-1px);
+    background: #48484a;
 }
 
 .action-btn:active {
-    transform: translateY(1px);
+    transform: scale(0.97);
     box-shadow: var(--shadow-btn-pressed);
 }
 
-.hidden {
-    display: none !important;
+.action-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
 }
 
-.boot-error {
-    position: fixed;
-    left: 50%;
-    bottom: 24px;
-    transform: translateX(-50%);
-    width: calc(100% - 40px);
-    max-width: 420px;
-    background: #ff3b3b;
-    color: #0a0a0a;
-    padding: 14px 18px;
-    border-radius: var(--radius-md);
-    font-size: 0.85rem;
-    font-weight: 600;
-    line-height: 1.6;
-    text-align: center;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
-    z-index: 10001;
+.training-start-btn {
+    background: var(--accent);
+    border-color: transparent;
+    color: #ffffff;
 }
+
+.training-start-btn:hover {
+    background: var(--accent-light);
+}
+
+.training-complete-btn {
+    background: var(--success);
+    border-color: transparent;
+    color: #05300f;
+}
+
+.training-complete-btn:hover {
+    background: #41e06a;
+}
+
+.training-collapse-btn,
+.training-rest-btn {
+    background: var(--surface-3);
+}
+
+button.btn-primary {
+    width: 100%;
+    background: linear-gradient(180deg, var(--accent-light), var(--accent-deep));
+    color: #ffffff;
+    border: none;
+    padding: 15px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: var(--text-headline);
+    letter-spacing: 0.01em;
+    box-shadow: var(--shadow-accent);
+    transition: var(--transition);
+}
+
+button.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-accent-hover);
+}
+
+button.btn-primary:active {
+    transform: scale(0.99);
+    box-shadow: var(--shadow-accent-pressed);
+}
+
+button.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+    transform: none;
+}
+
+/* ===== トースト・ブートエラー ===== */
 
 .toast-container {
     position: fixed;
-    bottom: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     z-index: 9999;
     pointer-events: none;
 }
 
 .toast {
-    background: var(--surface-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: rgba(44, 44, 46, 0.92);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
     color: var(--text-main);
-    padding: 12px 22px;
-    border: 1px solid var(--line);
+    padding: 12px 20px;
+    border: 1px solid var(--hairline-strong);
     border-radius: var(--radius-pill);
-    box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.6);
-    font-size: 0.9rem;
+    box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.8);
+    font-size: var(--text-caption);
     font-weight: 700;
 }
 
@@ -1003,30 +1403,69 @@ button.btn-primary:active {
     100% { opacity: 0; visibility: hidden; }
 }
 
-@media (max-width: 480px) {
+.boot-error {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    width: calc(100% - 40px);
+    max-width: 420px;
+    background: var(--danger);
+    color: #ffffff;
+    padding: 14px 18px;
+    border-radius: var(--radius-md);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    line-height: 1.6;
+    text-align: center;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+    z-index: 10001;
+}
+
+/* ===== ユーティリティ・アクセシビリティ ===== */
+
+.hidden {
+    display: none !important;
+}
+
+/* タップ時に枠が出っぱなしにならないよう :focus ではなく :focus-visible */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+    }
+}
+
+/* ===== レスポンシブ ===== */
+
+@media (min-width: 560px) {
+    .training-metrics-row {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 640px) {
     body {
-        padding: 10px;
+        padding: var(--space-5) var(--space-5) var(--space-6);
     }
 
+    .training-card,
     .app-main {
-        padding: 20px 16px;
+        padding: var(--space-5);
     }
 
     .app-header {
-        padding: 16px 18px;
+        padding: var(--space-4) var(--space-2) var(--space-3);
     }
-
-    .training-card {
-        padding: 4px 14px;
-    }
-}
-
-@keyframes rest-alarm-flash {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); border-color: var(--line); }
-    50% { box-shadow: 0 0 0 4px rgba(255, 82, 82, 0.35); border-color: rgba(255, 82, 82, 0.7); }
-}
-
-@keyframes rest-alarm-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.55; }
 }
