@@ -1340,16 +1340,58 @@ function noRoutineMessageHtml() {
         </div>
         <div class="training-onboarding">
             <div class="training-empty-art">${icon('dumbbell')}</div>
-            <p class="training-onboarding-step">
-                <span class="training-onboarding-step-num">1</span>
-                <strong>ホーム画面に追加(推奨)</strong><br>
-                Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップしてください。データがこの端末に残りやすくなります(追加しない場合、7日間開かないとデータが消えることがあります)。
-            </p>
-            <p class="training-onboarding-step">
-                <span class="training-onboarding-step-num">2</span>
-                <strong>ルーティーンを作成</strong><br>
-                上の「ルーティーン管理」タブから、トレーニングメニューを作成してください。
-            </p>
+            <p class="training-onboarding-lead">はじめ方は4ステップです。</p>
+            <ol class="training-onboarding-steps">
+                <li class="training-onboarding-step" data-accent="0">
+                    <span class="training-onboarding-step-num">1</span>
+                    <div class="training-onboarding-step-body">
+                        <strong class="training-onboarding-step-title">
+                            ${icon('plus')}<span>ホーム画面に追加</span>
+                            <span class="training-onboarding-step-tag">推奨</span>
+                        </strong>
+                        <p class="training-onboarding-step-text">
+                            Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップします。
+                            記録はこの端末の中だけに保存されるので、ホーム画面に追加しておくと消えにくくなります(追加しないまま7日間開かないと、Safariが自動で消してしまうことがあります)。
+                        </p>
+                    </div>
+                </li>
+                <li class="training-onboarding-step" data-accent="1">
+                    <span class="training-onboarding-step-num">2</span>
+                    <div class="training-onboarding-step-body">
+                        <strong class="training-onboarding-step-title">
+                            ${icon('layers')}<span>ルーティーンを作る</span>
+                        </strong>
+                        <p class="training-onboarding-step-text">
+                            上の「ルーティーン管理」タブでラベル(例: 胸・三頭)を入れ、「新しい種目」に種目名・セット数・重量・回数を入力して「種目を追加」で確定します。
+                            分割して回すなら「ルーティーンを追加」で2日目・3日目…と作れます。上から順に回ってくるので、↕をドラッグして順番を決めてください。
+                        </p>
+                    </div>
+                </li>
+                <li class="training-onboarding-step" data-accent="2">
+                    <span class="training-onboarding-step-num">3</span>
+                    <div class="training-onboarding-step-body">
+                        <strong class="training-onboarding-step-title">
+                            ${icon('play')}<span>トレーニングを始める</span>
+                        </strong>
+                        <p class="training-onboarding-step-text">
+                            「今日のトレーニング」タブに戻ると、その日に回ってくるメニューが出ます。「ワークアウト開始」→種目ごとの「開始」を押し、実際に挙げた重量と回数を選びます。
+                            「レスト開始」でインターバルのタイマーが動き、終わると音・バイブ・通知で知らせます。全部終えたら「ワークアウト終了」で記録されます。
+                        </p>
+                    </div>
+                </li>
+                <li class="training-onboarding-step" data-accent="3">
+                    <span class="training-onboarding-step-num">4</span>
+                    <div class="training-onboarding-step-body">
+                        <strong class="training-onboarding-step-title">
+                            ${icon('chart')}<span>記録をみる</span>
+                        </strong>
+                        <p class="training-onboarding-step-text">
+                            記録すると、上の数字が「前回のこのメニュー比」「自己ベスト更新」「今週のトレーニング」に切り替わります。
+                            週のカレンダーには記録した日に印が付き、下の「成長トレンド」で種目ごとの推移(推定1RM)をグラフで追えます。
+                        </p>
+                    </div>
+                </li>
+            </ol>
         </div>
     `;
 }

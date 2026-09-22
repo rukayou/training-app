@@ -911,6 +911,14 @@ body {
     margin-top: var(--space-4);
 }
 
+.training-onboarding-lead {
+    margin: 0;
+    text-align: center;
+    font-size: var(--text-body);
+    font-weight: 700;
+    color: var(--text-main);
+}
+
 .training-empty-art {
     width: 64px;
     height: 64px;
@@ -924,34 +932,101 @@ body {
     background: var(--accent-wash);
 }
 
-.training-onboarding-step {
+.training-onboarding-steps {
+    list-style: none;
     margin: 0;
-    padding: var(--space-3) var(--space-4);
-    background: var(--surface-2);
-    border-radius: var(--radius-md);
-    font-size: var(--text-caption);
-    color: var(--text-muted);
-    line-height: 1.7;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
 }
 
-.training-onboarding-step strong {
-    color: var(--text-main);
-    font-size: var(--text-body);
+/* ステップごとの担当色。ルーティーン管理の枠と同じ4色の循環にして、
+   アプリ全体で色の使い方を揃える。 */
+.training-onboarding-step { --step-accent: var(--accent); }
+.training-onboarding-step[data-accent="1"] { --step-accent: var(--success); }
+.training-onboarding-step[data-accent="2"] { --step-accent: var(--warn); }
+.training-onboarding-step[data-accent="3"] { --step-accent: var(--purple); }
+
+.training-onboarding-step {
+    position: relative;
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+}
+
+/* 番号どうしをつなぐ縦線(Appleのセットアップ画面の作法)。絶対配置なので
+   カードの高さ計算には影響しない。カード間のgapぶんだけ下へはみ出させる。 */
+.training-onboarding-step:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--space-4) + 12px);
+    top: calc(var(--space-3) + 26px);
+    bottom: calc(-1 * var(--space-2));
+    width: 2px;
+    transform: translateX(-1px);
+    background: var(--hairline);
+    pointer-events: none;
 }
 
 .training-onboarding-step-num {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
-    margin-right: 7px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--step-accent);
     color: #ffffff;
-    font-size: var(--text-micro);
+    font-size: var(--text-caption);
     font-weight: 800;
-    vertical-align: 2px;
+    font-variant-numeric: tabular-nums;
+}
+
+.training-onboarding-step-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.training-onboarding-step-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    color: var(--text-main);
+    font-size: var(--text-body);
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.training-onboarding-step-title .icon {
+    font-size: 18px;
+    color: var(--step-accent);
+}
+
+.training-onboarding-step-tag {
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-micro);
+    font-weight: 700;
+    color: var(--step-accent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.training-onboarding-step-text {
+    margin: 0;
+    font-size: var(--text-caption);
+    color: var(--text-muted);
+    line-height: 1.75;
 }
 
 /* ===== ルーティーン管理 ===== */
