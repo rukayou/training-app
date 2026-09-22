@@ -965,11 +965,58 @@ body {
     animation: panel-in 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.routine-management-intro {
+/* 説明文を素の段落からヒントのカードへ。文言は変えていない。 */
+.routine-management-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
     margin: var(--space-2) 0 var(--space-4);
+    padding: var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+}
+
+.routine-management-hint-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    color: var(--accent);
+    background: var(--accent-wash);
+}
+
+.routine-management-hint-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.routine-management-intro {
+    margin: 0;
     font-size: var(--text-caption);
     color: var(--text-muted);
     line-height: 1.7;
+}
+
+/* エディタ先頭の1行概況。#routineManagementEditor の中に描いているので、
+   追加・削除・並び替えのたびの render() でそのまま最新になる。 */
+.training-routine-editor-overview {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--text-caption);
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.training-routine-editor-overview .icon {
+    font-size: 17px;
+    color: var(--accent);
 }
 
 .training-routine-editor {
@@ -984,12 +1031,23 @@ body {
     gap: 16px;
 }
 
+/* ルーティーンごとの担当色。data-accent は dayIndex % 4(JS側)。
+   子孫は全部 var(--day-accent) を参照するだけでよく、要素ごとに色分岐を
+   書かずに済む。並び替えたときにどの枠がどこへ動いたかを色で追える。
+   当てる先は「レイアウトに影響しないもの」だけに限定している - 特に
+   .training-routine-editor-day-content へ border-left を足すのは禁止。
+   中のセット行の利用可能幅が減って「+」が折り返す(余裕は4px弱しかない)。 */
+.training-routine-editor-day { --day-accent: var(--accent); }
+.training-routine-editor-day[data-accent="1"] { --day-accent: var(--success); }
+.training-routine-editor-day[data-accent="2"] { --day-accent: var(--warn); }
+.training-routine-editor-day[data-accent="3"] { --day-accent: var(--purple); }
+
 /* ルーティーン枠そのものがスワイプ行。左スワイプすると枠ごと動いて
    右から削除が出る(種目行・セット行のスワイプ行が入れ子で中に入る)。
    .swipe-row は後方で border-radius: var(--radius-sm) を指定しているので、
    詳細度を上げて枠本来の大きい角丸を維持する。 */
 .training-routine-editor-day {
-    border: 1px solid var(--hairline);
+    border: 1px solid color-mix(in srgb, var(--day-accent) 40%, var(--hairline));
     border-radius: var(--radius-md);
     background: var(--surface);
 }
@@ -1007,6 +1065,19 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+
+/* 枠の上端を走る担当色の細い線。絶対配置なので幅・高さの計算には
+   一切影響しない(セット行の1行維持を壊さないための条件)。 */
+.training-routine-editor-day-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--day-accent), transparent 85%);
+    pointer-events: none;
 }
 
 .training-routine-editor-day.is-dragging {
@@ -1027,9 +1098,54 @@ body {
 .training-routine-editor-day-label-tag {
     font-size: var(--text-micro);
     font-weight: 700;
-    color: var(--text-faint);
     flex-shrink: 0;
     letter-spacing: 0.02em;
+    padding: 5px var(--space-2);
+    border-radius: var(--radius-pill);
+    color: var(--day-accent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+/* ===== ルーティーン枠の要約(種目数・セット数・予定ボリューム) ===== */
+
+.training-routine-editor-day-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-3);
+    font-size: var(--text-micro);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.training-routine-editor-day-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.training-routine-editor-day-stat .icon {
+    font-size: 14px;
+    color: var(--day-accent);
+}
+
+/* dayForSessionCount() が指す枠だけに付く。説明文が約束している
+   「次に行うメニュー」を画面上で初めて示すもの。 */
+.training-routine-editor-day-next {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 4px var(--space-2);
+    border-radius: var(--radius-pill);
+    color: var(--day-accent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    font-weight: 700;
+}
+
+.training-routine-editor-day-next .icon {
+    font-size: 12px;
 }
 
 .training-routine-editor-label-input,
@@ -1083,12 +1199,92 @@ body {
     gap: 6px;
 }
 
-.training-routine-editor-exercise-header-content {
+/* 詳細度に注意: この要素には .swipe-row-content と
+   .training-routine-editor-exercise-header-content の2クラスが同時に乗って
+   いる。.swipe-row-content の指定はこれより後方にあるため、同詳細度だと
+   background を後勝ちで奪われる。連結して詳細度を上げてある。
+   不透明であることは維持しているので、スワイプ前に赤いパネルは透けない。 */
+.swipe-row-content.training-routine-editor-exercise-header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+}
+
+/* 種目行と下書き欄の中の入力欄は、面(surface-2)と同色だと「入力できる」
+   ことが伝わらないので一段明るくする。 */
+.training-routine-editor-exercise-header-content .training-routine-editor-name-input,
+.training-routine-editor-exercise-draft .training-routine-editor-name-input {
+    background: var(--surface-3);
+}
+
+/* 「編集」は枠の担当色の淡い面で持たせる。ベタ塗りの青のままだと枠ごとの
+   色分けの中で一番うるさい要素になり、色の家族感が崩れる。淡い面なら
+   どの色相でも文字が読め、「+ 種目を追加」と同じ作法で揃う。 */
+.training-routine-editor-exercise-header-content .training-start-btn {
+    color: var(--day-accent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+    border-color: transparent;
+    font-weight: 700;
+    box-shadow: none;
+}
+
+.training-routine-editor-exercise-header-content .training-start-btn:hover {
+    background: color-mix(in srgb, currentColor 26%, transparent);
+}
+
+/* 今日のカードの .training-exercise-chip と同じ作り。色だけ枠の担当色に。 */
+.training-routine-editor-exercise-chip {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    font-size: 17px;
+    color: var(--day-accent);
+    background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+/* flex-basis:100% なので折り返して必ず2行目に落ちる - ラッパーdivを足さずに
+   済ませるための手。チップ幅30px + gap10px ぶん左に寄せて名前と頭を揃える。
+   ピラミッドセットで長くなっても1行で省略する。 */
+.training-routine-editor-exercise-summary {
+    flex: 0 0 100%;
+    margin-left: 40px;
+    font-size: var(--text-micro);
+    font-weight: 600;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 種目0件のルーティーン(初回起動時にまず目に入る状態)。
+   .training-routine-editor-exercise-row にはマッチしないので、行数を
+   数えている既存テストには影響しない。 */
+.training-routine-editor-exercise-empty {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: var(--space-3);
+    border: 1px dashed var(--hairline);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-caption);
+    line-height: 1.6;
+    color: var(--text-muted);
+}
+
+.training-routine-editor-exercise-empty .icon {
+    font-size: 20px;
+    color: var(--day-accent);
 }
 
 .training-routine-editor-exercise-actions {
@@ -1213,8 +1409,10 @@ body {
 }
 
 .training-routine-editor-settings {
-    padding-top: var(--space-4);
-    border-top: 1px solid var(--hairline);
+    padding: var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
 }
 
 .training-routine-editor-rest-label {
@@ -1225,6 +1423,15 @@ body {
     font-size: var(--text-caption);
     color: var(--text-muted);
     font-weight: 600;
+}
+
+.training-routine-editor-rest-label .icon {
+    font-size: 17px;
+    color: var(--cyan);
+}
+
+.training-routine-editor-rest-label select {
+    margin-left: auto;
 }
 
 .training-routine-editor-footer {
@@ -1239,6 +1446,10 @@ body {
 .action-btn.training-routine-editor-add-day {
     width: 100%;
     min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     color: var(--accent);
     background: var(--accent-wash);
     border-color: transparent;
@@ -1253,6 +1464,10 @@ body {
 
 .training-routine-editor-save-btn {
     width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
 }
 
 /* 読み込み失敗時の簡易表示(renderError) */

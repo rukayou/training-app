@@ -877,6 +877,11 @@ function sessionsThisWeek(logs, todayStr) {
     return logs.filter((l) => week.has(l.date)).length;
 }
 
+// 3桁区切り。メトリクス行とルーティーン管理の要約で共用する。
+function formatJpNumber(n) {
+    return n.toLocaleString('ja-JP');
+}
+
 function sessionVolume(exercises) {
     return exercises.reduce(
         (sum, ex) => sum + ex.sets.reduce((s, set) => s + set.weight * set.reps, 0),
@@ -993,7 +998,7 @@ function exerciseBlockHtml(ex, i) {
 // 数値と単位を分けて持つのは、数値だけを大きく・単位を小さく組んで桁を
 // 揃えるため(カウントアップ中に揺れないよう、CSS側で tabular-nums 指定)。
 function trainingMetricsRowHtml({ todayLog, logs, routine, day, todayStr }) {
-    const jp = (n) => n.toLocaleString('ja-JP');
+    const jp = formatJpNumber;
     const prevLog = previousLogForDay(logs, day, todayStr);
 
     const duration = {
@@ -1114,6 +1119,32 @@ function weekStripHtml(logs, todayStr) {
 // drag-and-drop: a day realistically holds a handful of exercises, so
 // pointer-based DnD isn't worth the risk for what two buttons already do.
 
+// 折りたたみ中の種目行に出す1行要約。展開すればセット行そのものが見えるので
+// 展開中は出さない。同じ重量・回数のセットはgroupSets()が1グループにまとめて
+// いるので、そのまま "3セット · 60kg × 8回" と読める。ピラミッドセットなど
+// 複数グループのときは各段を並べる(長い場合はCSS側で省略記号にする)。
+function exerciseSummaryText(ex) {
+    if (!ex.sets.length) return null;
+    const groups = groupSets(ex.sets);
+    const totalSets = ex.sets.length;
+    if (groups.length === 1) {
+        const g = groups[0];
+        return `${totalSets}セット · ${formatJpNumber(g.weight)}kg × ${g.reps}回`;
+    }
+    const steps = groups.map((g) => `${formatJpNumber(g.weight)}kg×${g.reps}`).join(' / ');
+    return `${totalSets}セット · ${steps}`;
+}
+
+// ルーティーン枠の見出しに出す要約。全て手元のdaysから算出できるので
+// 追加の読み込みは無い(sessionVolumeは今日のカードと同じ計算)。
+function daySummary(day) {
+    return {
+        exerciseCount: day.exercises.length,
+        setCount: day.exercises.reduce((n, ex) => n + ex.sets.length, 0),
+        volume: sessionVolume(day.exercises),
+    };
+}
+
 // Mirrors exerciseActionsHtml's 開始 button - shown only while collapsed
 // (the expanded/閉じる counterpart now lives at the bottom of the body, see
 // routineExerciseRowHtml), same neutral training-start-btn color so the
@@ -1169,6 +1200,7 @@ function routineExerciseBodyHtml(ex, dayIndex, exIndex) {
 // 展開中は本文にも同じ名前の入力欄が出て二重表示になっていたのを解消。
 function routineExerciseRowHtml(ex, dayIndex, exIndex) {
     const expanded = !!ex.expanded;
+    const summary = exerciseSummaryText(ex);
     return `
         <div class="training-routine-editor-exercise-row" data-day="${dayIndex}" data-ex="${exIndex}" data-expanded="${expanded}">
             <div class="training-routine-editor-exercise-header swipe-row">
@@ -1176,8 +1208,10 @@ function routineExerciseRowHtml(ex, dayIndex, exIndex) {
                     <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-ex" data-action="ex-remove" data-day="${dayIndex}" data-ex="${exIndex}">${icon('trash')}<span>削除</span></button>
                 </div>
                 <div class="swipe-row-content training-routine-editor-exercise-header-content">
+                    <span class="training-routine-editor-exercise-chip">${icon('dumbbell')}</span>
                     <input type="text" class="training-routine-editor-name-input training-routine-editor-exercise-name-input" value="${escapeHtml(ex.name)}" placeholder="種目名">
                     ${expanded ? '' : `<div class="training-routine-editor-exercise-actions">${routineExerciseToggleBtnHtml(dayIndex, exIndex)}</div>`}
+                    ${expanded || !summary ? '' : `<span class="training-routine-editor-exercise-summary">${escapeHtml(summary)}</span>`}
                 </div>
             </div>
             ${expanded ? routineExerciseBodyHtml(ex, dayIndex, exIndex) : ''}
@@ -1209,10 +1243,21 @@ function routineExerciseDraftHtml(draft, dayIndex) {
     `;
 }
 
-function routineDayBlockHtml(day, dayIndex, days) {
+// data-accent は dayIndex % 4。CSS側で --day-accent を差し替えるだけの
+// フックで、バッジ・アイコン・枠線の色が全部それを参照する。並び替えたとき
+// に「どれがどこへ動いたか」を色で追えるようにするのが狙い。
+// nextDayNumber は dayForSessionCount() が返す1始まりの番号(次に回ってくる
+// ルーティーン)。説明文が約束している「次に行うメニュー」を画面上で示す。
+function routineDayBlockHtml(day, dayIndex, days, nextDayNumber) {
     const rows = day.exercises.map((ex, i) => routineExerciseRowHtml(ex, dayIndex, i)).join('');
+    const { exerciseCount, setCount, volume } = daySummary(day);
+    const isNext = dayIndex + 1 === nextDayNumber;
+    const emptyMessage = `
+                    <p class="training-routine-editor-exercise-empty">
+                        ${icon('dumbbell')}<span>まだ種目がありません。下の「新しい種目」から追加してください。</span>
+                    </p>`;
     return `
-        <div class="training-routine-editor-day swipe-row" data-day="${dayIndex}">
+        <div class="training-routine-editor-day swipe-row" data-day="${dayIndex}" data-accent="${dayIndex % 4}">
             <div class="swipe-row-actions">
                 <button type="button" class="swipe-row-delete-btn training-routine-editor-remove-day" data-action="day-remove" data-day="${dayIndex}" ${days.length <= 1 ? 'disabled' : ''}>${icon('trash')}<span>削除</span></button>
             </div>
@@ -1224,9 +1269,15 @@ function routineDayBlockHtml(day, dayIndex, days) {
                         <button type="button" class="action-btn training-routine-editor-day-drag-handle" aria-label="ドラッグして並び替え" title="ドラッグして並び替え">${icon('grip')}</button>
                     </div>
                 </div>
-                <div class="training-routine-editor-exercise-list">${rows}</div>
+                <div class="training-routine-editor-day-summary">
+                    <span class="training-routine-editor-day-stat">${icon('layers')}<span>${exerciseCount}種目</span></span>
+                    <span class="training-routine-editor-day-stat">${icon('repeat')}<span>${setCount}セット</span></span>
+                    <span class="training-routine-editor-day-stat">${icon('flame')}<span>予定${formatJpNumber(volume)}kg</span></span>
+                    ${isNext ? `<span class="training-routine-editor-day-next">${icon('play')}<span>次はこれ</span></span>` : ''}
+                </div>
+                <div class="training-routine-editor-exercise-list">${rows || emptyMessage}</div>
                 ${routineExerciseDraftHtml(day.draft, dayIndex)}
-                <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">+ 種目を追加</button>
+                <button type="button" class="action-btn training-routine-editor-add-ex" data-action="ex-add" data-day="${dayIndex}">${icon('plus')}<span>種目を追加</span></button>
             </div>
         </div>
     `;
@@ -1247,22 +1298,30 @@ function routineRestSelectHtml(restSeconds) {
         .map((s) => `<option value="${s}" ${s === restSeconds ? 'selected' : ''}>${formatRestTime(s)}</option>`)
         .join('');
     return `
-        <label class="training-routine-editor-rest-label">デフォルトのレスト時間:
+        <label class="training-routine-editor-rest-label">${icon('clock')}<span>デフォルトのレスト時間</span>
             <select class="training-routine-editor-rest-select">${options}</select>
         </label>
     `;
 }
 
-function routineEditorHtml(days, restSeconds) {
-    const dayBlocks = days.map((day, i) => routineDayBlockHtml(day, i, days)).join('');
+// totalWorkoutCount は「次はどのルーティーンか」を出すためだけに使う。
+// #routineManagementEditor の中に描くので、追加・削除・並び替えのたびの
+// render() でそのまま最新に更新される。
+function routineEditorHtml(days, restSeconds, totalWorkoutCount) {
+    const nextDayNumber = dayForSessionCount(totalWorkoutCount, days.length);
+    const dayBlocks = days.map((day, i) => routineDayBlockHtml(day, i, days, nextDayNumber)).join('');
+    const totalExercises = days.reduce((n, day) => n + day.exercises.length, 0);
     return `
+        <p class="training-routine-editor-overview">
+            ${icon('layers')}<span>${days.length}本のルーティーン · 全${totalExercises}種目</span>
+        </p>
         <div class="training-routine-editor-days">${dayBlocks}</div>
         <div class="training-routine-editor-settings">
             ${routineRestSelectHtml(restSeconds)}
         </div>
         <div class="training-routine-editor-footer">
-            <button type="button" class="action-btn training-routine-editor-add-day" data-action="day-add">+ ルーティーンを追加</button>
-            <button type="button" class="btn-primary training-routine-editor-save-btn" data-action="routine-save">ルーティーンを保存する</button>
+            <button type="button" class="action-btn training-routine-editor-add-day" data-action="day-add">${icon('plus')}<span>ルーティーンを追加</span></button>
+            <button type="button" class="btn-primary training-routine-editor-save-btn" data-action="routine-save">${icon('check')}<span>ルーティーンを保存する</span></button>
         </div>
     `;
 }
@@ -1504,7 +1563,7 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
     }
 
     function render() {
-        editorEl.innerHTML = routineEditorHtml(days, restSeconds);
+        editorEl.innerHTML = routineEditorHtml(days, restSeconds, trainingState.total_workout_count);
     }
 
     async function saveRoutine() {

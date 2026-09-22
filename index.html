@@ -46,9 +46,19 @@
             <div class="training-header">
                 <span class="training-title">ルーティーン管理</span>
             </div>
-            <p class="routine-management-intro">
-                1〜数日分のトレーニングメニュー(ルーティーン)をここで作成・編集できます。↕ボタンをドラッグして並び替えた順番どおりに、次に行うメニューが選ばれます。
-            </p>
+            <!-- js/app.js の icon('grip') と同じパス。ここは静的マークアップ
+                 なのでヘッダーのダンベルマークと同様にインラインで直書きする。 -->
+            <div class="routine-management-hint">
+                <span class="routine-management-hint-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 6.5h.01M15 6.5h.01M9 12h.01M15 12h.01M9 17.5h.01M15 17.5h.01"/>
+                    </svg>
+                </span>
+                <p class="routine-management-intro">
+                    1〜数日分のトレーニングメニュー(ルーティーン)をここで作成・編集できます。↕ボタンをドラッグして並び替えた順番どおりに、次に行うメニューが選ばれます。
+                </p>
+            </div>
             <div id="routineManagementEditor" class="training-routine-editor"></div>
         </div>
 
