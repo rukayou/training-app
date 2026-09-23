@@ -2023,17 +2023,6 @@ async function loadTraining() {
         const durationEl = container.querySelector('.training-metric-value[data-metric="duration"]');
         toggleBtn.addEventListener('click', () => {
             const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
-            // 進行中のワークアウトがある状態で畳もうとしたら、そこが
-            // 「中止」の入口になる。以前は記録を作る「ワークアウト終了」
-            // 以外に出口が無く、間違えて始めると抜けられなかった。
-            // キャンセルを選べば開いたまま続けられる。
-            if (expanded && loadActiveSession()) {
-                if (!confirm('トレーニングを中止しますか?\n入力した内容は記録されません。')) return;
-                cancelActiveWorkout();
-                loadTraining();
-                showQuickToast('トレーニングを中止しました');
-                return;
-            }
             const nowExpanded = !expanded;
             toggleBtn.setAttribute('aria-expanded', String(nowExpanded));
             list.classList.toggle('hidden', expanded);
@@ -2178,6 +2167,28 @@ async function loadTraining() {
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // 完了した種目がひとつも無い状態での「終了」は、間違えて始めて
+            // しまった可能性が高い。ここを中止の入口にする - 種目の「開始」を
+            // 押した時点でセッションが始まり、以前は記録を作る終了以外に
+            // 出口が無かった。
+            // 完了を押さずに最後までやる人もいるので、自動で中止はしない。
+            // キャンセルを選べばそのまま記録される(増えるのはタップ1回)。
+            const doneCount = form.querySelectorAll('.training-exercise-block[data-status="done"]').length;
+            if (doneCount === 0) {
+                const abort = confirm(
+                    '完了した種目がひとつもありません。\nトレーニングを中止しますか?\n\n'
+                    + 'OK … 中止する(記録は残りません)\n'
+                    + 'キャンセル … このまま記録する'
+                );
+                if (abort) {
+                    cancelActiveWorkout();
+                    loadTraining();
+                    showQuickToast('トレーニングを中止しました');
+                    return;
+                }
+            }
+
             const exercises = readFormExercises(form, routine.exercises, enteredSets);
 
             const hasAnyReps = exercises.some((ex) => ex.sets.some((s) => s.reps > 0));
