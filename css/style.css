@@ -1833,6 +1833,83 @@ button.btn-primary:disabled {
     100% { opacity: 0; visibility: hidden; }
 }
 
+/* ===== カスタム確認ダイアログ ===== */
+/* ネイティブ confirm() はボタン文言を OK/キャンセル固定でしか出せないため、
+   選択肢そのものが文言になっているダイアログが要る場面向け。 */
+
+.training-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: var(--space-5);
+    animation: confirm-overlay-in 0.15s ease;
+}
+
+.training-confirm-dialog {
+    width: 100%;
+    max-width: 320px;
+    background: rgba(44, 44, 46, 0.92);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-4) var(--space-4);
+    box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.85);
+    animation: confirm-dialog-in 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.training-confirm-message {
+    margin: 0 0 var(--space-4);
+    font-size: var(--text-body);
+    line-height: 1.6;
+    color: var(--text-main);
+    text-align: center;
+}
+
+.training-confirm-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.training-confirm-btn {
+    flex: 1 1 0;
+    min-height: 46px;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: var(--text-body);
+    font-weight: 700;
+    background: var(--surface-3);
+    color: var(--text-main);
+}
+
+.training-confirm-btn:active {
+    transform: scale(0.98);
+}
+
+.training-confirm-btn-primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.training-confirm-btn-danger {
+    background: var(--danger);
+    color: #fff;
+}
+
+@keyframes confirm-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes confirm-dialog-in {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 1; transform: scale(1); }
+}
+
 .boot-error {
     position: fixed;
     left: 50%;

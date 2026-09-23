@@ -61,6 +61,33 @@ function showQuickToast(text) {
     });
 }
 
+// ネイティブの confirm() はボタン文言を OK / キャンセル 固定でしか出せない
+// (iOSでは「OK」「キャンセル」の日本語ローカライズすら怪しい場合がある)ため、
+// 選択肢そのものが文言になっているカスタムのダイアログ。押した方を true/false
+// で解決する Promise を返す。
+function confirmActionDialog({ message, confirmLabel, cancelLabel, danger = false }) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'training-confirm-overlay';
+        overlay.innerHTML = `
+            <div class="training-confirm-dialog" role="alertdialog" aria-modal="true">
+                <p class="training-confirm-message">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+                <div class="training-confirm-actions">
+                    <button type="button" class="training-confirm-btn" data-choice="cancel">${escapeHtml(cancelLabel)}</button>
+                    <button type="button" class="training-confirm-btn ${danger ? 'training-confirm-btn-danger' : 'training-confirm-btn-primary'}" data-choice="confirm">${escapeHtml(confirmLabel)}</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        const finish = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+        overlay.querySelector('[data-choice="confirm"]').addEventListener('click', () => finish(true));
+        overlay.querySelector('[data-choice="cancel"]').addEventListener('click', () => finish(false));
+    });
+}
+
 // Pure, dependency-free chart drawing - no DOM references.
 // points: { date: string ("YYYY-MM-DD"), value: number }[], already sorted
 // oldest-first.
@@ -2176,11 +2203,12 @@ async function loadTraining() {
             // キャンセルを選べばそのまま記録される(増えるのはタップ1回)。
             const doneCount = form.querySelectorAll('.training-exercise-block[data-status="done"]').length;
             if (doneCount === 0) {
-                const abort = confirm(
-                    '完了した種目がひとつもありません。\nトレーニングを中止しますか?\n\n'
-                    + 'OK … 中止する(記録は残りません)\n'
-                    + 'キャンセル … このまま記録する'
-                );
+                const abort = await confirmActionDialog({
+                    message: '完了した種目がひとつもありません。\nこのままトレーニングを中止しますか?\n中止すると記録は残りません。',
+                    confirmLabel: '中止する',
+                    cancelLabel: '記録する',
+                    danger: true,
+                });
                 if (abort) {
                     cancelActiveWorkout();
                     loadTraining();
