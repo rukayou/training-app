@@ -1687,6 +1687,40 @@ body {
     background: var(--surface-3);
 }
 
+/* 展開中だけ、操作ボタン群にヘッダーの1行を丸ごと使わせる。
+   .training-exercise-actions は margin-left:auto で内容幅に縮んでいるので、
+   これを付けないと中で flex-basis:100% を指定しても「いっぱい」にならない。
+   折りたたみ中(data-status="pending")は「開始」1つだけなので、今までどおり
+   右端に小さく置いたまま。 */
+.training-exercise-block[data-status="expanded"] .training-exercise-actions {
+    flex: 1 1 100%;
+}
+
+/* レスト開始だけを次の行へ落として幅いっぱいに。毎セット押すうえ、息が
+   上がっていて画面をよく見ていない・片手、という条件で押すボタンなので、
+   ここだけタップ領域を大きく取る(他は約40pxでiOSの目安44pxを下回る)。
+   色は無彩色のまま - 上に大きな青の「ワークアウト開始」、隣に緑の「完了」が
+   あるので、色まで足すと騒がしくなる。大きさと位置だけで主役にする。
+   .action-btn の padding を上書きするためクラスを連結して詳細度を上げている。 */
+.action-btn.training-rest-btn {
+    flex: 1 0 100%;
+    min-height: 52px;
+    font-size: var(--text-headline);
+    font-weight: 700;
+}
+
+/* レスト開始を押すと、同じ場所がカウントダウン(-15秒/残り/+15秒/✕/進捗バー)
+   やアラーム(停止)に差し替わる。親が1行を使うようになっても、中の要素は
+   内容幅のままなので明示的に行いっぱいへ広げる - ここが右端に寄ったままだと
+   ボタンだけ大きくした意味が薄い。 */
+.training-rest-timer,
+.training-rest-alarm {
+    flex: 1 0 100%;
+    /* このスタイルシートに box-sizing の全体リセットは無い。付けないと
+       flex-basis:100% に自身の padding が足されて行から溢れる。 */
+    box-sizing: border-box;
+}
+
 button.btn-primary {
     width: 100%;
     background: linear-gradient(180deg, var(--accent-light), var(--accent-deep));
