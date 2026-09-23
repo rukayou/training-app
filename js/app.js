@@ -270,6 +270,16 @@ function appendLog(entry) {
     writeJSON(LS_LOGS_KEY, logs);
 }
 
+// 直前の記録を1件消して、残った中で一番新しい日付を返す(1件も残らなければ
+// null)。巻き戻し後の last_workout_date はこれを使う - 現在値から推測すると
+// 「お休み中」の判定がずれる。
+function removeLastLog() {
+    const logs = loadLogs();
+    logs.pop();
+    writeJSON(LS_LOGS_KEY, logs);
+    return logs.length ? logs[logs.length - 1].date : null;
+}
+
 // Keyed by exercise index. Holds the setInterval id plus enough state to
 // re-render the countdown - never trust DOM survival for this, since both
 // "閉じる" and the post-save loadTraining() re-render wipe/replace the DOM
@@ -680,6 +690,16 @@ function stopAllRestTimers() {
 // "is a session running and when did it start" so it survives a re-render
 // or a reload.
 let sessionTimerIntervalId = null;
+
+// 間違えて始めてしまったワークアウトを、記録を一切作らずに畳む。
+// 種目の開始を押した時点でセッションが始まり、以前は「ワークアウト終了」
+// (=記録が作られる)以外に出口が無かった。
+function cancelActiveWorkout() {
+    stopAllRestTimers();
+    clearAllPersistedRestTimers();
+    stopSessionTimerDisplay();
+    clearActiveSession();
+}
 
 function stopSessionTimerDisplay() {
     if (sessionTimerIntervalId !== null) {
@@ -1110,6 +1130,10 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
                 </div>
                 <div class="training-chart-wrap"></div>
             </div>
+            ${logs.length ? `
+            <div class="training-card-footer">
+                <button type="button" class="training-undo-log-btn">${icon('close')}<span>直前の記録を取り消す</span></button>
+            </div>` : ''}
         </div>
     `;
 }
@@ -1999,12 +2023,61 @@ async function loadTraining() {
         const durationEl = container.querySelector('.training-metric-value[data-metric="duration"]');
         toggleBtn.addEventListener('click', () => {
             const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+            // 進行中のワークアウトがある状態で畳もうとしたら、そこが
+            // 「中止」の入口になる。以前は記録を作る「ワークアウト終了」
+            // 以外に出口が無く、間違えて始めると抜けられなかった。
+            // キャンセルを選べば開いたまま続けられる。
+            if (expanded && loadActiveSession()) {
+                if (!confirm('トレーニングを中止しますか?\n入力した内容は記録されません。')) return;
+                cancelActiveWorkout();
+                loadTraining();
+                showQuickToast('トレーニングを中止しました');
+                return;
+            }
             const nowExpanded = !expanded;
             toggleBtn.setAttribute('aria-expanded', String(nowExpanded));
             list.classList.toggle('hidden', expanded);
             container.classList.toggle('expanded', nowExpanded);
             // カードを開くだけではセッションは始まらない - 実際に種目の
             // 「開始」を押した時点が「トレーニング開始」(下のex-start参照)。
+        });
+
+        // 直前の記録を無かったことにする。誤って「ワークアウト終了」を押して
+        // しまうと、記録が1件増えたうえ通算日数が進んで次に出るメニューまで
+        // ずれるため、その巻き戻し手段。何を消すのかを具体的に見せてから確認する。
+        const undoBtn = container.querySelector('.training-undo-log-btn');
+        undoBtn?.addEventListener('click', () => {
+            const target = logs[logs.length - 1];
+            if (!target) return;
+            const [, m, d] = target.date.split('-');
+            // ログが持っているのは日の番号だけなので、ラベルは今のルーティーン
+            // から引く。「ルーティーン2」より「背中・二頭」のほうが、消して
+            // いいものか見分けやすい。
+            const targetLabel = routines[target.day - 1]?.label || (target.day ? `ルーティーン${target.day}` : '');
+            const summary = `${Number(m)}月${Number(d)}日 ${targetLabel}`.trim()
+                + ` / ${formatJpNumber(target.volume ?? 0)}kg`
+                + (target.duration_minutes ? ` / ${target.duration_minutes}分` : '');
+            const ok = confirm(
+                `以下の記録を取り消します。よろしいですか?\n\n${summary}\n\n`
+                + '・この記録は完全に削除されます\n'
+                + '・通算日数が1つ戻り、次に出るメニューも1つ戻ります\n'
+                + '・ルーティーンの重量・回数は戻りません'
+            );
+            if (!ok) return;
+            try {
+                const previousDate = removeLastLog();
+                saveState({
+                    // 現在値から引くのではなく、そのログが持っている通算数から
+                    // 戻す。続けて押しても壊れない。
+                    total_workout_count: Math.max(0, (target.total_workout_count ?? 1) - 1),
+                    last_workout_date: previousDate,
+                });
+                loadTraining();
+                showQuickToast('記録を取り消しました');
+            } catch (e) {
+                console.error('記録の取り消しに失敗:', e);
+                alert('記録の取り消しに失敗しました。');
+            }
         });
 
         const chartWrap = container.querySelector('.training-chart-wrap');
