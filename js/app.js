@@ -1856,20 +1856,27 @@ function initRoutineEditor(editorEl, { initialDays, trainingState }) {
     render();
 }
 
-// An exercise left collapsed - whether "完了" was tapped or it was simply
-// never opened - has no input elements in the DOM at all. Both cases mean
-// the same thing: record it exactly as planned, using the routine's own
-// numbers rather than reading anything from the page.
-function readFormExercises(form, routineExercises) {
+// 開いている種目の入力欄から実測値を読む。開いていなければnull。
+// readFormExercises と「閉じる」の退避処理で同じ読み方を共用するための
+// 切り出しで、セレクタは従来どおり。
+function readSetsFromExerciseBody(body, exercise) {
+    if (!body || !body.querySelector('.training-weight-input')) return null;
+    return exercise.sets.map((_, setIndex) => ({
+        weight: Number(body.querySelector(`.training-weight-input[data-set="${setIndex}"]`).value) || 0,
+        reps: Number(body.querySelector(`.training-reps-input[data-set="${setIndex}"]`).value) || 0,
+    }));
+}
+
+// 入力欄が画面に無い種目の扱いは3段構え。
+//   1. 「閉じる」で一度入力してから畳んだ種目 -> enteredSets に退避した実測値
+//   2. それ以外(一度も開いていない) -> ルーティーンの予定値どおりやったとみなす
+// 「完了」を押しただけの種目は入力欄が残っているので1でも2でもなく直接読む。
+function readFormExercises(form, routineExercises, enteredSets) {
     return routineExercises.map((ex, exIndex) => {
         const body = form.querySelector(`.training-exercise-block[data-ex="${exIndex}"] .training-exercise-body`);
-        const opened = body && body.querySelector('.training-weight-input');
-        const sets = opened
-            ? ex.sets.map((_, setIndex) => ({
-                weight: Number(body.querySelector(`.training-weight-input[data-set="${setIndex}"]`).value) || 0,
-                reps: Number(body.querySelector(`.training-reps-input[data-set="${setIndex}"]`).value) || 0,
-            }))
-            : ex.sets.map((s) => ({ weight: s.weight, reps: s.reps }));
+        const sets = readSetsFromExerciseBody(body, ex)
+            ?? enteredSets?.get(exIndex)
+            ?? ex.sets.map((s) => ({ weight: s.weight, reps: s.reps }));
         return { name: ex.name, sets };
     });
 }
@@ -1990,6 +1997,13 @@ async function loadTraining() {
 
         const form = container.querySelector('.training-form');
 
+        // 「閉じる」で畳んだ種目の入力値の退避先。閉じると入力欄ごとDOMから
+        // 消えるので、ここに残しておかないと「数値を変えてから閉じただけ」で
+        // 実測値が失われ、予定どおりやったことにされてしまう。
+        // カードを描き直すたびに作り直される(=リロードすると消える)が、
+        // それは入力欄そのものも同じなので後退にはならない。
+        const enteredSets = new Map();
+
         form.addEventListener('click', (e) => {
             const btn = e.target.closest('button[data-action], a[data-action]');
             if (!btn) return;
@@ -2029,7 +2043,11 @@ async function loadTraining() {
             const body = block.querySelector('.training-exercise-body');
 
             if (action === 'ex-start') {
-                expandExerciseBlock(block, exIndex, routine.exercises[exIndex]);
+                // 前に入れた値があればそれを出す。予定値に戻して見せると、
+                // 画面の数字と実際に記録される数字が食い違う。
+                const planned = routine.exercises[exIndex];
+                const entered = enteredSets.get(exIndex);
+                expandExerciseBlock(block, exIndex, entered ? { ...planned, sets: entered } : planned);
                 // 「トレーニング開始」は種目の開始ボタンを押した瞬間 - カードを
                 // 開いただけ(トグル)ではまだ始まらない。2つ目以降の種目を
                 // 開始してもセッションは1つのまま(既存セッションがあれば
@@ -2043,6 +2061,9 @@ async function loadTraining() {
                 clearPersistedRestTimer(exIndex);
                 broadcastRestStop(exIndex);
                 block.dataset.status = 'pending';
+                // 入力欄を消す前に、入っている値を退避しておく。
+                const entered = readSetsFromExerciseBody(body, routine.exercises[exIndex]);
+                if (entered) enteredSets.set(exIndex, entered);
                 body.innerHTML = '';
                 actions.innerHTML = exerciseActionsHtml(exIndex);
             } else if (action === 'ex-complete') {
@@ -2064,7 +2085,7 @@ async function loadTraining() {
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const exercises = readFormExercises(form, routine.exercises);
+            const exercises = readFormExercises(form, routine.exercises, enteredSets);
 
             const hasAnyReps = exercises.some((ex) => ex.sets.some((s) => s.reps > 0));
             if (!hasAnyReps) {
@@ -2103,21 +2124,25 @@ async function loadTraining() {
                     alert_threshold_days: trainingState.alert_threshold_days,
                 });
 
-                // "以上" (at-or-above) the current planned weight still counts
-                // as a new best worth remembering, per the spec - now applied
-                // per set rather than to one shared default, since each set
-                // can have its own planned weight/reps.
+                // その日に実際にやった内容を、そのまま次回の予定にする。
+                // 以前は「予定以上の重量を出したときだけ」上書きし、回数は
+                // 予定値のまま残していた。そのため軽くした日・回数を落とした
+                // 日は反映されず、次回また古い予定が出てきて、結局ルーティーン
+                // 管理を開いて手で直すことになっていた。実際にやった値が次の
+                // 出発点になるほうが素直なので、上下どちらへも無条件に反映する。
+                // 一度も開かなかった種目は readFormExercises() が予定値をその
+                // まま返すので、書き戻しても同じ値=無変更になる。
                 const updatedExercises = routine.exercises.map((ex, i) => ({
                     ...ex,
                     sets: ex.sets.map((plannedSet, setIndex) => {
                         const actual = exercises[i].sets[setIndex];
-                        return actual && actual.weight >= plannedSet.weight
-                            ? { weight: actual.weight, reps: plannedSet.reps }
-                            : plannedSet;
+                        return actual ? { weight: actual.weight, reps: actual.reps } : plannedSet;
                     }),
                 }));
-                const anyChanged = updatedExercises.some((ex, i) =>
-                    ex.sets.some((s, si) => s.weight !== routine.exercises[i].sets[si].weight));
+                const anyChanged = updatedExercises.some((ex, i) => ex.sets.some((s, si) => {
+                    const planned = routine.exercises[i].sets[si];
+                    return s.weight !== planned.weight || s.reps !== planned.reps;
+                }));
                 if (anyChanged) {
                     updateRoutineDayExercises(day, updatedExercises);
                 }
@@ -2125,7 +2150,8 @@ async function loadTraining() {
                 clearAllPersistedRestTimers();
                 clearActiveSession();
                 loadTraining();
-                showQuickToast('お疲れ様でした！');
+                // 予定を書き換える挙動なので、黙って変わらないよう一言添える。
+                showQuickToast(anyChanged ? 'お疲れ様でした！次回の予定を更新しました' : 'お疲れ様でした！');
             } catch (err) {
                 console.error('Training save error:', err);
                 alert('記録の保存に失敗しました。');
