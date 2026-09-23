@@ -1,0 +1,60 @@
+/* ローカル同梱のフォント定義。ネットワークを一切使わないための差し替えで、
+   以前は Google Fonts を <link> で読んでいた(=オフラインだと欧文が
+   フォールバックしていた。ネイティブアプリ化にあたっては外部通信そのものを
+   無くしたいので同梱に切り替えた)。
+
+   同梱しているのは Plus Jakarta Sans の latin サブセットだけ(5ウェイトで
+   計133KB)。数字・kg・単位といった、デザイン上いちばん効く欧文部分を
+   担当する。
+
+   日本語は同梱していない。Noto Sans JP は全文字を含めると1ウェイトあたり
+   約9MB、4ウェイトで約37MBになる。利用者が入力する種目名は任意の漢字を
+   含みうるのでサブセット化もできず、一部だけ入れると単語の途中で書体が
+   変わってかえって汚い。iOS には Hiragino Sans が標準で入っており、
+   Apple 自身のヘルスケアもこれを使っている - 元々のデザインの狙いに
+   照らしてもこちらのほうが素直なので、日本語はOSの書体に任せる。 */
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(../fonts/plus-jakarta-sans-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(../fonts/plus-jakarta-sans-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(../fonts/plus-jakarta-sans-600-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(../fonts/plus-jakarta-sans-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url(../fonts/plus-jakarta-sans-800-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

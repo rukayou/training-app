@@ -1,0 +1,12 @@
+node_modules/
+# Capacitor がビルドのたびに作り直す中間物。ソースはリポジトリのルート側。
+www/
+# CocoaPods が Mac 側で入れる依存。Podfile / Podfile.lock は追跡する。
+ios/App/Pods/
+ios/App/App/public/
+ios/App/output/
+ios/App/build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store

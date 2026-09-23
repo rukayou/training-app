@@ -85,7 +85,11 @@
 }
 
 body {
-    font-family: 'Plus Jakarta Sans', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* 欧文は同梱の Plus Jakarta Sans、和文はOS標準(iOSならHiragino Sans、
+       Androidなら Noto Sans CJK)。詳しい理由は css/fonts.css の冒頭。 */
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont,
+        'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP',
+        'Yu Gothic UI', 'Meiryo', sans-serif;
     background: var(--bg);
     background-image:
         radial-gradient(ellipse 90% 45% at 50% -8%, rgba(10, 132, 255, 0.22), transparent 70%),

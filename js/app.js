@@ -327,6 +327,7 @@ function clearPersistedRestTimer(exIndex) {
 // otherwise get misread as belonging to whatever exercise now has that same
 // index on the new day.
 function clearAllPersistedRestTimers() {
+    window.NativeBridge?.cancelRestAlarm();
     try {
         localStorage.removeItem(REST_TIMER_STORAGE_KEY);
     } catch (e) {
@@ -520,6 +521,12 @@ function teardownAudioPipeline() {
 // this call is always a no-op on iPhone. Kept unconditional since it's a
 // real, working alert on Android/desktop and harmless everywhere else.
 function vibrateAlert() {
+    // iOS Safari は navigator.vibrate に対応していないため、Web版では
+    // 実質何も起きていなかった。ネイティブでは触覚フィードバックを使う。
+    if (window.NativeBridge?.isNative) {
+        window.NativeBridge.notificationFeedback();
+        return;
+    }
     try {
         navigator.vibrate?.(500);
     } catch (e) {
@@ -540,6 +547,9 @@ function alertTick() {
 // register there at all) - sound/vibration/the in-page alarm still work
 // fine either way.
 async function showRestBanner() {
+    // ネイティブでは、レスト開始時にOSへ予約した通知が時刻どおりに出る
+    // (アプリが前面に居なくても鳴る)。ここで重ねて出すと二重になる。
+    if (window.NativeBridge?.isNative) return;
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
     if (!('serviceWorker' in navigator)) return;
     try {
@@ -700,6 +710,9 @@ function stopRestForExercise(exIndex, actionsEl) {
     teardownAudioPipeline();
     stopRestTimer(exIndex);
     clearPersistedRestTimer(exIndex);
+    // OSに預けた予約も必ず取り消す。残っていると、止めたはずのレストが
+    // 後から鳴る(画面側の停止だけでは消えない)。
+    window.NativeBridge?.cancelRestAlarm();
     broadcastRestStop(exIndex);
     const liveEl = actionsEl.querySelector(
         `.training-rest-timer[data-ex="${exIndex}"], .training-rest-alarm[data-ex="${exIndex}"]`
@@ -747,6 +760,10 @@ function startRestTimer(exIndex, actionsEl, endTimestamp) {
 
     let end = endTimestamp;
     persistRestTimer(exIndex, end);
+    // 終了時刻をOSに預けておく。アプリを閉じていても・バックグラウンドでも
+    // 確実に鳴らせるのがネイティブ版の一番の利点なので、画面内のカウント
+    // ダウンとは独立に必ず予約する。
+    window.NativeBridge?.scheduleRestAlarm(end);
     const computeRemaining = () => Math.max(0, Math.ceil((end - Date.now()) / 1000));
 
     const startBtn = actionsEl.querySelector(`[data-action="ex-rest-start"][data-ex="${exIndex}"]`);
@@ -773,6 +790,7 @@ function startRestTimer(exIndex, actionsEl, endTimestamp) {
     const reachZero = () => {
         stopRestTimer(exIndex);
         clearPersistedRestTimer(exIndex);
+        window.NativeBridge?.cancelRestAlarm();
         enterAlarmState(exIndex, actionsEl);
     };
 
@@ -804,8 +822,11 @@ function startRestTimer(exIndex, actionsEl, endTimestamp) {
             end = Math.max(Date.now(), end + deltaSeconds * 1000);
             persistRestTimer(exIndex, end);
             if (computeRemaining() <= 0) {
+                window.NativeBridge?.cancelRestAlarm();
                 reachZero();
             } else {
+                // 予約したままだと元の時刻で鳴ってしまうので付け替える。
+                window.NativeBridge?.scheduleRestAlarm(end);
                 render();
             }
         },
@@ -1334,64 +1355,60 @@ function routineEditorHtml(days, restSeconds, totalWorkoutCount) {
 // routine/log exists, this onboarding message is gone for good (no routine
 // count ever goes back to zero on its own).
 function noRoutineMessageHtml() {
+    // ステップ1(ホーム画面に追加)はブラウザで開いている人だけの話。
+    // ネイティブアプリは既にインストール済みで、データもアプリの領域に
+    // 入っているので出さない - 残すと「もう済んでいること」を指示されて
+    // 混乱するだけ。番号は配列の並びから振るので、抜いても自動で詰まる。
+    const steps = [];
+    if (!window.NativeBridge?.isNative) {
+        steps.push({
+            icon: 'plus',
+            title: 'ホーム画面に追加',
+            tag: '推奨',
+            text: `Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップします。
+                   記録はこの端末の中だけに保存されるので、ホーム画面に追加しておくと消えにくくなります(追加しないまま7日間開かないと、Safariが自動で消してしまうことがあります)。`,
+        });
+    }
+    steps.push({
+        icon: 'layers',
+        title: 'ルーティーンを作る',
+        text: `上の「ルーティーン管理」タブでラベル(例: 胸・三頭)を入れ、「新しい種目」に種目名・セット数・重量・回数を入力して「種目を追加」で確定します。
+               分割して回すなら「ルーティーンを追加」で2日目・3日目…と作れます。上から順に回ってくるので、↕をドラッグして順番を決めてください。`,
+    });
+    steps.push({
+        icon: 'play',
+        title: 'トレーニングを始める',
+        text: `「今日のトレーニング」タブに戻ると、その日に回ってくるメニューが出ます。「ワークアウト開始」→種目ごとの「開始」を押し、実際に挙げた重量と回数を選びます。
+               「レスト開始」でインターバルのタイマーが動き、終わると音・バイブ・通知で知らせます。全部終えたら「ワークアウト終了」で記録されます。`,
+    });
+    steps.push({
+        icon: 'chart',
+        title: '記録をみる',
+        text: `記録すると、上の数字が「前回のこのメニュー比」「自己ベスト更新」「今週のトレーニング」に切り替わります。
+               週のカレンダーには記録した日に印が付き、下の「成長トレンド」で種目ごとの推移(推定1RM)をグラフで追えます。
+               挙げた重量・回数はそのまま次回の予定になります。`,
+    });
+
+    const items = steps.map((step, i) => `
+                <li class="training-onboarding-step" data-accent="${i % 4}">
+                    <span class="training-onboarding-step-num">${i + 1}</span>
+                    <div class="training-onboarding-step-body">
+                        <strong class="training-onboarding-step-title">
+                            ${icon(step.icon)}<span>${escapeHtml(step.title)}</span>
+                            ${step.tag ? `<span class="training-onboarding-step-tag">${escapeHtml(step.tag)}</span>` : ''}
+                        </strong>
+                        <p class="training-onboarding-step-text">${escapeHtml(step.text)}</p>
+                    </div>
+                </li>`).join('');
+
     return `
         <div class="training-header">
             <span class="training-title">筋トレルーティーン</span>
         </div>
         <div class="training-onboarding">
             <div class="training-empty-art">${icon('dumbbell')}</div>
-            <p class="training-onboarding-lead">はじめ方は4ステップです。</p>
-            <ol class="training-onboarding-steps">
-                <li class="training-onboarding-step" data-accent="0">
-                    <span class="training-onboarding-step-num">1</span>
-                    <div class="training-onboarding-step-body">
-                        <strong class="training-onboarding-step-title">
-                            ${icon('plus')}<span>ホーム画面に追加</span>
-                            <span class="training-onboarding-step-tag">推奨</span>
-                        </strong>
-                        <p class="training-onboarding-step-text">
-                            Safari下部の共有ボタン(□に↑)→「ホーム画面に追加」→右上の「追加」の順にタップします。
-                            記録はこの端末の中だけに保存されるので、ホーム画面に追加しておくと消えにくくなります(追加しないまま7日間開かないと、Safariが自動で消してしまうことがあります)。
-                        </p>
-                    </div>
-                </li>
-                <li class="training-onboarding-step" data-accent="1">
-                    <span class="training-onboarding-step-num">2</span>
-                    <div class="training-onboarding-step-body">
-                        <strong class="training-onboarding-step-title">
-                            ${icon('layers')}<span>ルーティーンを作る</span>
-                        </strong>
-                        <p class="training-onboarding-step-text">
-                            上の「ルーティーン管理」タブでラベル(例: 胸・三頭)を入れ、「新しい種目」に種目名・セット数・重量・回数を入力して「種目を追加」で確定します。
-                            分割して回すなら「ルーティーンを追加」で2日目・3日目…と作れます。上から順に回ってくるので、↕をドラッグして順番を決めてください。
-                        </p>
-                    </div>
-                </li>
-                <li class="training-onboarding-step" data-accent="2">
-                    <span class="training-onboarding-step-num">3</span>
-                    <div class="training-onboarding-step-body">
-                        <strong class="training-onboarding-step-title">
-                            ${icon('play')}<span>トレーニングを始める</span>
-                        </strong>
-                        <p class="training-onboarding-step-text">
-                            「今日のトレーニング」タブに戻ると、その日に回ってくるメニューが出ます。「ワークアウト開始」→種目ごとの「開始」を押し、実際に挙げた重量と回数を選びます。
-                            「レスト開始」でインターバルのタイマーが動き、終わると音・バイブ・通知で知らせます。全部終えたら「ワークアウト終了」で記録されます。
-                        </p>
-                    </div>
-                </li>
-                <li class="training-onboarding-step" data-accent="3">
-                    <span class="training-onboarding-step-num">4</span>
-                    <div class="training-onboarding-step-body">
-                        <strong class="training-onboarding-step-title">
-                            ${icon('chart')}<span>記録をみる</span>
-                        </strong>
-                        <p class="training-onboarding-step-text">
-                            記録すると、上の数字が「前回のこのメニュー比」「自己ベスト更新」「今週のトレーニング」に切り替わります。
-                            週のカレンダーには記録した日に印が付き、下の「成長トレンド」で種目ごとの推移(推定1RM)をグラフで追えます。
-                        </p>
-                    </div>
-                </li>
-            </ol>
+            <p class="training-onboarding-lead">はじめ方は${steps.length}ステップです。</p>
+            <ol class="training-onboarding-steps">${items}</ol>
         </div>
     `;
 }
@@ -2067,6 +2084,9 @@ async function loadTraining() {
                 body.innerHTML = '';
                 actions.innerHTML = exerciseActionsHtml(exIndex);
             } else if (action === 'ex-complete') {
+                // 種目を終えた手応え。画面を見ずに押せる場面が多いので、
+                // 触覚で「入った」ことが分かるようにする(Web版では何も起きない)。
+                window.NativeBridge?.impact('MEDIUM');
                 block.dataset.status = 'done';
                 actions.classList.add('hidden');
                 badge.classList.remove('hidden');
@@ -2204,6 +2224,9 @@ function registerServiceWorker() {
     // Best-effort: silently no-ops over file:// (no secure context) or in
     // older browsers without support - sound/vibration/the in-page alarm
     // still work regardless.
+    // ネイティブ版はアプリのバンドルから直接読み込むので、「毎回サーバーに
+    // 確認する」サービスワーカーは意味が無い(更新はApp Store経由)。
+    if (window.NativeBridge?.isNative) return;
     if (!('serviceWorker' in navigator)) return;
     navigator.serviceWorker.register('sw.js').catch((e) => {
         console.error('Service worker registration failed:', e);
@@ -2218,6 +2241,16 @@ function registerServiceWorker() {
 function initAppReload() {
     const btn = document.getElementById('appReloadBtn');
     if (!btn) return;
+    // ネイティブ版の更新はApp Store経由。手動で再読み込みしても何も変わら
+    // ないうえ、「押したのに新しくならない」と受け取られるので出さない。
+    // フッターの文言も、保存先が「このブラウザ」ではなくアプリの領域になる。
+    if (window.NativeBridge?.isNative) {
+        btn.remove();
+        document.getElementById('appVersionLine')?.remove();
+        const note = document.querySelector('.app-footer p');
+        if (note) note.textContent = '筋トレ記録・この端末だけに保存されます';
+        return;
+    }
     btn.addEventListener('click', async () => {
         btn.disabled = true;
         btn.textContent = '更新中…';
@@ -2247,6 +2280,8 @@ function initAppReload() {
 // 差し替わるのは利用者が「最新の状態に更新」を押した時なので、
 // トレーニング中に勝手に画面が作り直されることはない。
 function initAppUpdateWatch() {
+    // ネイティブ版はサービスワーカーを登録しないので監視する対象が無い。
+    if (window.NativeBridge?.isNative) return;
     if (!('serviceWorker' in navigator)) return;
 
     document.addEventListener('visibilitychange', () => {

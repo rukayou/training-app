@@ -1,0 +1,15 @@
+{
+  "appId": "com.rukayou.kintorekiroku",
+  "appName": "筋トレ記録",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#000000"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#0A84FF"
+    }
+  }
+}

@@ -7,9 +7,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>筋トレ記録</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <!-- フォントは同梱(css/fonts.css)。外部への通信はこのページには一切
+         無く、機内モードでも初回から正しい書体で表示される。 -->
+    <link rel="stylesheet" href="css/fonts.css">
     <link rel="stylesheet" href="css/style.css">
     <link rel="icon" href="icons/icon-h-32.png">
     <link rel="apple-touch-icon" href="icons/icon-h-180.png">
@@ -86,6 +86,10 @@
      video), just made visually invisible. -->
 <video id="restAlarmAudioSink" playsinline aria-hidden="true" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;"></video>
 
+<!-- ネイティブ機能のブリッジ。app.js より先に読み込む必要がある
+     (app.js が window.NativeBridge を参照するため)。ブラウザで開いた
+     場合は全ての関数が何もしないので、Web版でもそのまま動く。 -->
+<script src="js/native.js"></script>
 <script src="js/app.js"></script>
 <script>
     setTimeout(function () {
