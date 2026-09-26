@@ -1,0 +1,16 @@
+# Cloudflare Workers の静的アセット配信から除外するもの。
+# Web版として配信したいのは index.html / css / js / fonts / icons / sw.js だけで、
+# それ以外(iOSプロジェクト・ドキュメント・ビルド設定)は公開先には不要。
+wrangler.jsonc
+.assetsignore
+.gitignore
+.git
+node_modules
+package.json
+package-lock.json
+capacitor.config.json
+scripts
+ios
+www
+IOS.md
+README.md

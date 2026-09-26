@@ -1,0 +1,13 @@
+// Cloudflare Workers(静的アセット配信)の設定。
+// サーバー側のロジックは一切無く、このリポジトリのルートをそのまま
+// 静的ファイルとして配信するだけ(GitHub Pagesでの配信内容と同じ)。
+// オフライン対応・更新チェックなどは全てクライアント側の sw.js / js/app.js が
+// 担っているので、Worker本体のスクリプト(main)は不要。
+{
+	"$schema": "https://developers.cloudflare.com/workers/wrangler/dist/config-schema.json",
+	"name": "training-app",
+	"compatibility_date": "2026-09-26",
+	"assets": {
+		"directory": "./"
+	}
+}
