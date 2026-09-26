@@ -438,6 +438,33 @@ body {
     color: var(--text-muted);
 }
 
+/* ===== 今日の一言(モチベーション) ===== */
+
+.training-quote {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 10px var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--accent-wash);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1.4;
+}
+
+.training-quote-icon {
+    flex-shrink: 0;
+    display: flex;
+    color: var(--accent);
+}
+
+.training-quote-icon .icon {
+    width: 16px;
+    height: 16px;
+}
+
 /* ===== ワークアウト開始トグル ===== */
 
 .training-header-actions {

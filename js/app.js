@@ -37,6 +37,7 @@ const ICONS = {
     arrowDown: '<path d="M12 5v13M6.5 12.5 12 18l5.5-5.5"/>',
     close: '<path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/>',
     bell: '<path d="M6 10a6 6 0 0 1 12 0c0 4 1.5 5.5 1.5 5.5h-15S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/>',
+    sparkle: '<path d="M12 3c.7 3.4 2.7 5.4 6.1 6.1-3.4.7-5.4 2.7-6.1 6.1-.7-3.4-2.7-5.4-6.1-6.1C9.3 8.4 11.3 6.4 12 3Z" fill="currentColor" stroke-linejoin="round"/><path d="M19 15c.3 1.6 1.2 2.5 2.8 2.8-1.6.3-2.5 1.2-2.8 2.8-.3-1.6-1.2-2.5-2.8-2.8 1.6-.3 2.5-1.2 2.8-2.8Z" fill="currentColor" stroke-linejoin="round"/>',
 };
 
 function icon(name, cls = '') {
@@ -1122,6 +1123,47 @@ function trainingMetricsRowHtml({ todayLog, logs, routine, day, todayStr }) {
     `;
 }
 
+// 「今日やるか」と思えるための一言。カードを開くたびに変わると軽くなって
+// しまうので、日付から決定的に選ぶ(同じ日は同じ言葉、日付が変われば
+// 別の言葉になる) - カレンダーの日めくりに近い体験を狙っている。
+const MOTIVATIONAL_QUOTES = [
+    '今日の一歩が、明日の自分をつくる。',
+    'やる気が出るのを待つより、始めた方が早い。',
+    '5分だけでもいい。まずは体を動かそう。',
+    '昨日の自分より、ちょっとだけ強くなろう。',
+    'サボった日より、やった日の方が後悔しない。',
+    '今日やらない理由より、やる理由を1つ。',
+    '続けてるだけで、もう才能。',
+    '重い日も、軽い日も、続けてる日。',
+    '始めるまでが一番しんどい。あとは体が動く。',
+    '今日の自分に、ちょっと期待してみる。',
+    'できる日にやる。それだけでいい。',
+    '小さな積み重ねが、いつか自信になる。',
+    'やった後はいつも「やってよかった」。',
+    '今日の記録は、未来の自分への手紙。',
+    '動けば変わる。動かなければ、今のまま。',
+    '完璧を求めなくていい。今日もやる、それが大事。',
+    '今日の1セットが、明日の余裕になる。',
+    '疲れてる日ほど、体を動かすと楽になる。',
+    '限界は、思ってるよりずっと先にある。',
+    '続けてきた自分を、今日も裏切らない。',
+    'やるかどうかより、まず動き出す。',
+    '今日も体を動かせる、それ自体が幸せ。',
+    '自分との約束を、今日も守る。',
+    '強くなるのは、今日みたいな日の積み重ね。',
+    '気分が乗らない日こそ、始めてみる価値がある。',
+    '今日のトレーニングは、未来のご褒美。',
+    '続けることに、才能はいらない。',
+    '今日やれば、明日の自分が楽になる。',
+    'さあ、今日の自分を更新しよう。',
+];
+
+function quoteOfTheDay(dateStr) {
+    let hash = 0;
+    for (let i = 0; i < dateStr.length; i++) hash = (hash * 31 + dateStr.charCodeAt(i)) | 0;
+    return MOTIVATIONAL_QUOTES[Math.abs(hash) % MOTIVATIONAL_QUOTES.length];
+}
+
 function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, exercises, exerciseNames, chartExercise, todayLog, logs, routine, day, todayStr }) {
     const countHtml = isOverdue
         ? `${icon('flag')}<span>${overdueDays}日以上お休み中</span>`
@@ -1139,6 +1181,10 @@ function buildCardHtml({ label, pendingSessionNumber, isOverdue, overdueDays, ex
                 <span class="training-title">${escapeHtml(label)} ・ 通算${pendingSessionNumber}日目</span>
             </div>
             ${trainingMetricsRowHtml({ todayLog, logs, routine, day, todayStr })}
+            <p class="training-quote">
+                <span class="training-quote-icon">${icon('sparkle')}</span>
+                <span>${escapeHtml(quoteOfTheDay(todayStr))}</span>
+            </p>
             <div class="training-header-actions">
                 <button type="button" class="training-start-toggle training-status-pill ${isOverdue ? 'is-overdue' : ''}" aria-expanded="false">
                     ${countHtml} <span class="training-chevron">${icon('chevronDown')}</span>
